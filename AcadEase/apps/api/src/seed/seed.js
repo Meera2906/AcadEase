@@ -13,6 +13,7 @@ import {
   ODRequest,
   Assessment,
   Marks,
+  Result,
   CertificateRequest,
   Certificate,
   Grievance,
@@ -36,6 +37,7 @@ async function clearCollections() {
       ODRequest,
       Assessment,
       Marks,
+      Result,
       CertificateRequest,
       Certificate,
       Grievance,
@@ -359,6 +361,55 @@ async function seedGrievances(students) {
   console.log("[seed] 3 grievances");
 }
 
+async function seedSemesterResults(students) {
+  const cseStudents = students.filter((s) => s.departmentId === "CSE_2024");
+  const courses = [
+    { courseId: "CS301", courseName: "Database Management Systems" },
+    { courseId: "CS302", courseName: "Operating Systems" },
+    { courseId: "CS303", courseName: "Computer Networks" },
+    { courseId: "CS304", courseName: "Artificial Intelligence" },
+    { courseId: "CS305", courseName: "UI/UX Design Principles" },
+  ];
+
+  const grades = ["O", "A+", "A", "B+", "B", "C", "U"];
+  const gradeToMarks = { O: 91, "A+": 85, A: 75, "B+": 68, B: 60, C: 50, U: 38 };
+
+  const results = cseStudents.map((student, si) => {
+    const subjects = courses.map((c, ci) => {
+      // Struggling students get lower grades
+      const isStruggling = si % 5 === 0;
+      const isAverage = si % 3 === 0;
+      const gradePool = isStruggling
+        ? ["C", "B", "U", "B+", "C"]
+        : isAverage
+        ? ["B+", "A", "B", "A+", "B+"]
+        : ["A+", "O", "A", "A+", "A"];
+      const grade = gradePool[ci % gradePool.length];
+      const base = gradeToMarks[grade];
+      const marksObtained = base + Math.floor(Math.random() * 5);
+      return {
+        courseId: c.courseId,
+        courseName: c.courseName,
+        grade,
+        marksObtained,
+        maxMarks: 100,
+        result: grade === "U" ? "fail" : "pass",
+      };
+    });
+    return {
+      studentId: student.userId,
+      semester: 4, // previous semester results
+      academicYear: "2023-2024",
+      subjects,
+      enteredBy: "ADM_CSE_001",
+      releasedAt: new Date("2024-05-15"),
+    };
+  });
+
+  await Result.insertMany(results);
+  console.log(`[seed] ${results.length} semester results (Sem 4, 2023-2024)`);
+}
+
 async function seedNotificationsAndXp(students) {
   const notifs = [];
   students.slice(0, 8).forEach((s, i) => {
@@ -460,6 +511,7 @@ async function main() {
   await seedAttendance(students, courses);
   await seedOdRequests(students, courses);
   await seedAssessmentsAndMarks(students, courses);
+  await seedSemesterResults(students);
   await seedCertificates(students);
   await seedGrievances(students);
   await seedNotificationsAndXp(students);

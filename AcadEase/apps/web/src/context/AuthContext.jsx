@@ -23,6 +23,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Called during first-time 2FA setup: returns { secret, otpauthUrl }
+  const initTotpSetup = useCallback(async (userId, password) => {
+    setLoading(true);
+    try {
+      const { data } = await api.post("/auth/setup-totp", { userId, password });
+      return data;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const verifyTotp = useCallback(async (userId, token) => {
     setLoading(true);
     try {
@@ -42,7 +53,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, verifyTotp, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, initTotpSetup, verifyTotp, logout }}>
       {children}
     </AuthContext.Provider>
   );

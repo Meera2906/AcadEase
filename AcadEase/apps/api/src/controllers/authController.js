@@ -80,22 +80,35 @@ export async function verifyTotp(req, res) {
   return issueTokens(res, user);
 }
 
-// POST /api/auth/setup-totp  (requires prior password check — simplified: userId + password)
+// POST /api/auth/setup-totp  { userId, password }
+// First-time enrollment only. If already enabled, returns the existing setup
+// so the user can re-scan if they lost their device (admin should reset via /admin/users/:id).
 export async function setupTotp(req, res) {
   const { userId, password } = req.body;
+  if (!userId || !password) {
+    return res.status(400).json({ error: "userId and password are required" });
+  }
   const user = await User.findOne({ userId });
   if (!user) return res.status(404).json({ error: "User not found" });
+  if (!staffRequires2fa(user.role)) {
+    return res.status(403).json({ error: "2FA setup is only required for faculty and admin accounts" });
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
+  // Generate a fresh secret (replaces any existing one)
   const secret = generateTotpSecret();
-  user.totpSecret = secret; // NOTE: encrypt at rest before production use
+  user.totpSecret = secret;
   user.totpEnabled = true;
   await user.save();
 
   const otpauthUrl = getTotpOtpauthUrl(secret, user.email);
-  return res.json({ secret, otpauthUrl, message: "Scan this with Google Authenticator, then log in again." });
+  return res.json({
+    secret,
+    otpauthUrl,
+    message: "Scan the QR code with your authenticator app, then confirm with your first code.",
+  });
 }
 
 async function issueTokens(res, user) {

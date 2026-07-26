@@ -12,7 +12,7 @@ import {
   getLeaderboard,
   getCourseMarksSummary,
 } from "../controllers/assessmentController.js";
-import { enterSemesterResult, getStudentResults } from "../controllers/resultController.js";
+import { enterSemesterResult, getStudentResults, getStudentSessions } from "../controllers/resultController.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -29,6 +29,7 @@ router.get("/marks/assessment/:assessmentId/leaderboard", asyncHandler(getLeader
 router.get("/marks/course/:courseId/summary", requireRole("faculty", "admin"), asyncHandler(getCourseMarksSummary));
 
 router.post("/results/semester", requireRole("admin", "superadmin"), asyncHandler(enterSemesterResult));
+router.get("/results/student/:studentId/sessions", asyncHandler(getStudentSessions));
 router.get("/results/student/:studentId", asyncHandler(getStudentResults));
 
 export default router;
