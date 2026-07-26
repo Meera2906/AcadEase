@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle, Flame, Zap, Trophy, TrendingUp,
   CalendarCheck, ClipboardList, FileBadge, MessageSquareWarning,
-  ChevronRight, BookOpen,
+  ChevronRight, BookOpen, Clock,
 } from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -121,6 +121,7 @@ export default function StudentDashboard() {
   const [marks, setMarks] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [assessments, setAssessments] = useState([]);
+  const [todaySchedule, setTodaySchedule] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -131,12 +132,14 @@ export default function StudentDashboard() {
       api.get(`/marks/student/${user.userId}`).catch(() => ({ data: { marks: [] } })),
       api.get("/gamification/leaderboard").catch(() => ({ data: { leaderboard: [] } })),
       api.get("/assessments/mine").catch(() => ({ data: { assessments: [] } })),
-    ]).then(([s, x, m, lb, a]) => {
+      api.get(`/attendance/today-schedule/${user.userId}`).catch(() => ({ data: null })),
+    ]).then(([s, x, m, lb, a, ts]) => {
       setSummary(s.data);
       setXp(x.data);
       setMarks(m.data.marks || []);
       setLeaderboard(lb.data.leaderboard || []);
       setAssessments(a.data.assessments || []);
+      setTodaySchedule(ts.data);
     }).finally(() => setLoading(false));
   }, [user]);
 
@@ -233,7 +236,76 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* ── Row 2: Subject attendance cards ── */}
+          {/* ── Row 2: Today's Schedule ── */}
+          {todaySchedule && todaySchedule.schedule?.length > 0 && (
+            <div className="bg-white border border-border rounded-card shadow-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Clock size={15} className="text-signal" />
+                  <h2 className="text-sm font-semibold text-text-primary">Today's Schedule</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-signal bg-signal/10 px-2.5 py-1 rounded-pill">
+                    {todaySchedule.dayOrder}
+                  </span>
+                  <span className="text-xs text-text-muted">{todaySchedule.date}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
+                {todaySchedule.schedule.map((slot) => {
+                  const statusColors = {
+                    present: "border-success/30 bg-success/5",
+                    absent:  "border-danger/30 bg-danger/5",
+                    od:      "border-signal/30 bg-signal/5",
+                    late:    "border-warning/30 bg-warning/5",
+                  };
+                  const statusDot = {
+                    present: "bg-success",
+                    absent:  "bg-danger",
+                    od:      "bg-signal",
+                    late:    "bg-warning",
+                  };
+                  const statusLabel = {
+                    present: "Present",
+                    absent:  "Absent",
+                    od:      "On Duty",
+                    late:    "Late",
+                  };
+                  const cardStyle = slot.status ? statusColors[slot.status] : "border-border bg-paper/50";
+                  return (
+                    <div
+                      key={slot.courseId + slot.hour}
+                      className={`flex flex-col gap-1.5 p-3 rounded-xl border transition-colors ${cardStyle}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-text-muted">{slot.hour}</span>
+                        {slot.status && (
+                          <span className={`w-2 h-2 rounded-full ${statusDot[slot.status]}`} />
+                        )}
+                      </div>
+                      <p className="text-xs font-semibold text-text-primary leading-tight line-clamp-2">
+                        {slot.courseName}
+                      </p>
+                      <p className="text-[10px] font-mono text-text-muted">{slot.courseId}</p>
+                      {slot.status ? (
+                        <span className={`text-[10px] font-bold ${
+                          slot.status === "present" ? "text-success" :
+                          slot.status === "absent"  ? "text-danger"  :
+                          slot.status === "od"      ? "text-signal"  : "text-warning"
+                        }`}>
+                          {statusLabel[slot.status]}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-text-muted">Not marked</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Row 3: Subject attendance cards ── */}
           <div>
             <h2 className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
               <BookOpen size={15} /> Subject-wise Attendance
@@ -246,7 +318,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* ── Row 3: ProgressTracker + ExploreCourses + CourseCarousel ── */}
+          {/* ── Row 4: ProgressTracker + ExploreCourses + CourseCarousel ── */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             {/* ProgressTracker — 7 cols */}
             <div className="md:col-span-7">
@@ -265,7 +337,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* ── Row 4: ProblemsChart (attendance trend) + Calendar ── */}
+          {/* ── Row 5: ProblemsChart (attendance trend) + Calendar ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white border border-border rounded-card shadow-card">
               <ProblemsChart subjects={subjects} />
@@ -275,10 +347,10 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* ── Row 5: Learning Progress (contribution graph) ── */}
+          {/* ── Row 6: Learning Progress (contribution graph) ── */}
           <ContributionGraph events={xpEvents} />
 
-          {/* ── Row 6: Recent marks + Leaderboard ── */}
+          {/* ── Row 7: Recent marks + Leaderboard ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Recent assessment marks */}
             <div className="bg-white border border-border rounded-card p-5 shadow-card">

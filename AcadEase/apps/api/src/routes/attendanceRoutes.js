@@ -5,6 +5,9 @@ import {
   getStudentAttendance,
   getStudentSummary,
   getCourseAttendanceSheet,
+  getFacultyCourses,
+  getCourseRoster,
+  getTodaySchedule,
   markAttendance,
   editAttendanceRecord,
   getCourseAnalytics,
@@ -17,6 +20,9 @@ import {
 const router = Router();
 router.use(requireAuth);
 
+router.get("/faculty/courses", requireRole("faculty"), asyncHandler(getFacultyCourses));
+router.get("/course/:courseId/roster", requireRole("faculty", "admin"), asyncHandler(getCourseRoster));
+router.get("/today-schedule/:studentId", asyncHandler(getTodaySchedule));
 router.get("/student/:studentId", asyncHandler(getStudentAttendance));
 router.get("/student/:studentId/summary", asyncHandler(getStudentSummary));
 router.get("/course/:courseId/date/:date", requireRole("faculty", "admin"), asyncHandler(getCourseAttendanceSheet));
