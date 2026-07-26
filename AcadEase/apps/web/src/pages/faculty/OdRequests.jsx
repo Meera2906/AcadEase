@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, XCircle, FileText, ExternalLink } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
 import Card from "../../components/ui/Card.jsx";
 import Badge from "../../components/ui/Badge.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Toast, { useToast } from "../../components/ui/Toast.jsx";
+
+const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
 
 export default function FacultyOdRequests() {
   const [requests, setRequests]     = useState([]);
@@ -73,6 +75,16 @@ export default function FacultyOdRequests() {
                   </p>
                   {r.reasonDetails && (
                     <p className="text-sm text-text-secondary mt-1.5">{r.reasonDetails}</p>
+                  )}
+                  {r.supportingDocPath && (
+                    <a
+                      href={`${apiBase}/${r.supportingDocPath}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-signal hover:underline mt-1.5"
+                    >
+                      <FileText size={13} /> View attached proof <ExternalLink size={11} />
+                    </a>
                   )}
                 </div>
                 <Badge status={r.status} />

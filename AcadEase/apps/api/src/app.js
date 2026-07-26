@@ -45,7 +45,7 @@ app.use("/api/auth", authLimiter);
 
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-// Serve generated PDFs and uploaded resumes as static files
+// Serve generated PDFs, uploaded resumes, and OD docs as static files
 app.use("/storage", express.static(path.join(__dirname, "../storage")));
 
 app.use("/api/auth", authRoutes);

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, ChevronDown, ChevronUp, FileText, ExternalLink, Upload, X } from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import AppShell from "../../components/layout/AppShell.jsx";
@@ -9,6 +9,7 @@ import Button from "../../components/ui/Button.jsx";
 import Toast, { useToast } from "../../components/ui/Toast.jsx";
 
 const REASON_TYPES = ["Placement Drive", "Medical", "Event", "Personal", "Other"];
+const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
 
 export default function StudentOdRequests() {
   const { user } = useAuth();
@@ -18,7 +19,9 @@ export default function StudentOdRequests() {
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [form, setForm] = useState({ courseId: "", date: "", reasonType: "", reasonDetails: "" });
+  const [docFile, setDocFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const fileRef = useRef(null);
   const { toast, showToast, clearToast } = useToast();
 
   async function load() {
@@ -39,10 +42,17 @@ export default function StudentOdRequests() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/attendance/od-request", form);
+      const fd = new FormData();
+      fd.append("courseId", form.courseId);
+      fd.append("date", form.date);
+      fd.append("reasonType", form.reasonType);
+      fd.append("reasonDetails", form.reasonDetails);
+      if (docFile) fd.append("doc", docFile);
+      await api.post("/attendance/od-request", fd, { headers: { "Content-Type": "multipart/form-data" } });
       showToast("OD request submitted.", "success");
       setShowForm(false);
       setForm({ courseId: "", date: "", reasonType: "", reasonDetails: "" });
+      setDocFile(null);
       await load();
     } catch (err) {
       showToast(err.response?.data?.error || "Failed to submit OD request.", "error");
@@ -93,6 +103,16 @@ export default function StudentOdRequests() {
               {expanded === r._id && (
                 <div className="mt-3 pt-3 border-t border-border space-y-2">
                   {r.reasonDetails && <p className="text-sm text-text-secondary">{r.reasonDetails}</p>}
+                  {r.supportingDocPath && (
+                    <a
+                      href={`${apiBase}/${r.supportingDocPath}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-signal hover:underline"
+                    >
+                      <FileText size={13} /> View attached document <ExternalLink size={11} />
+                    </a>
+                  )}
                   {r.facultyNote && (
                     <div className="bg-paper rounded-card px-3 py-2">
                       <p className="text-xs font-semibold text-text-muted mb-0.5">Faculty Note</p>
@@ -134,6 +154,21 @@ export default function StudentOdRequests() {
               <div>
                 <label className="label">Details <span className="text-text-muted font-normal">(optional)</span></label>
                 <textarea maxLength={300} rows={3} value={form.reasonDetails} onChange={(e) => setForm({ ...form, reasonDetails: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="label">Supporting Document <span className="text-text-muted font-normal">(optional)</span></label>
+                <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => setDocFile(e.target.files?.[0] || null)} />
+                {docFile ? (
+                  <div className="flex items-center gap-2 text-xs text-text-primary bg-paper border border-border rounded-lg px-3 py-2">
+                    <FileText size={13} className="text-signal shrink-0" />
+                    <span className="flex-1 truncate">{docFile.name}</span>
+                    <button type="button" onClick={() => setDocFile(null)} className="text-danger"><X size={13} /></button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-2 text-xs text-signal border border-dashed border-signal/40 rounded-lg px-3 py-2 hover:bg-signal/5 transition-colors">
+                    <Upload size={13} /> Attach proof (PDF / JPG / PNG · max 2 MB)
+                  </button>
+                )}
               </div>
               <div className="flex gap-3 pt-1">
                 <Button type="submit" disabled={submitting} className="flex-1">{submitting ? "Submitting…" : "Submit"}</Button>

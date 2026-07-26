@@ -1,5 +1,28 @@
 import { AttendanceRecord, ODRequest, Course, Enrollment, User } from "../models/index.js";
 import { notifyAbsent, pushNotification } from "../utils/notify.js";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const odDocDir = path.join(__dirname, "../../storage/od-docs");
+if (!fs.existsSync(odDocDir)) fs.mkdirSync(odDocDir, { recursive: true });
+
+export const odDocUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, odDocDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${req.user.userId}_od_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [".pdf", ".jpg", ".jpeg", ".png"];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
+});
 
 // GET /api/attendance/faculty/courses
 // Returns all courses the faculty teaches, each with today's attendance status
@@ -274,29 +297,42 @@ export async function getCourseAnalytics(req, res) {
   res.json({ courseId, defaulters, chronicAbsentees, studentCount: Object.keys(perStudent).length });
 }
 
-// POST /api/attendance/od-request
+// POST /api/attendance/od-request  (multipart/form-data — doc optional)
 export async function submitOdRequest(req, res) {
   const studentId = req.user.userId;
-  const { courseId, attendanceRecordId, date, reasonType, reasonDetails, supportingDocPath } = req.body;
+  const { courseId, attendanceRecordId, date, reasonType, reasonDetails } = req.body;
 
   if (!courseId || !date || !reasonType) {
     return res.status(400).json({ error: "courseId, date, and reasonType are required" });
   }
 
-  // Auto-resolve facultyId from the course
   const course = await Course.findOne({ courseId });
   const facultyId = req.body.facultyId || course?.facultyId || "";
+
+  const supportingDocPath = req.file ? `storage/od-docs/${req.file.filename}` : null;
 
   const odRequest = await ODRequest.create({
     studentId,
     courseId,
     facultyId,
-    attendanceRecordId,
+    attendanceRecordId: attendanceRecordId || null,
     date,
     reasonType,
-    reasonDetails,
+    reasonDetails: reasonDetails || "",
     supportingDocPath,
   });
+
+  // Notify faculty
+  if (facultyId) {
+    await pushNotification({
+      userId: facultyId,
+      type: "od_status",
+      priority: "medium",
+      title: "New dispute / OD request",
+      message: `A student has raised a dispute for ${courseId} on ${new Date(date).toDateString()}. Reason: ${reasonType}.`,
+      linkTo: "/faculty/od-requests",
+    });
+  }
 
   res.status(201).json({ message: "OD request submitted", odRequest });
 }

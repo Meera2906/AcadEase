@@ -15,6 +15,7 @@ import {
   getPendingOdRequests,
   getStudentOdRequests,
   reviewOdRequest,
+  odDocUpload,
 } from "../controllers/attendanceController.js";
 
 const router = Router();
@@ -30,7 +31,7 @@ router.post("/mark", requireRole("faculty"), asyncHandler(markAttendance));
 router.patch("/:recordId", requireRole("faculty", "admin"), asyncHandler(editAttendanceRecord));
 router.get("/course/:courseId/analytics", requireRole("faculty", "admin"), asyncHandler(getCourseAnalytics));
 
-router.post("/od-request", requireRole("student"), asyncHandler(submitOdRequest));
+router.post("/od-request", requireRole("student"), odDocUpload.single("doc"), asyncHandler(submitOdRequest));
 router.get("/od-requests", requireRole("faculty"), asyncHandler(getPendingOdRequests));
 router.get("/od-requests/student/:studentId", asyncHandler(getStudentOdRequests));
 router.patch("/od-request/:id", requireRole("faculty"), asyncHandler(reviewOdRequest));
