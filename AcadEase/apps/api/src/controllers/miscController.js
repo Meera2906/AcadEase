@@ -13,6 +13,7 @@ import {
   Marks,
   Course,
   XpLedger,
+  Announcement,
 } from "../models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -331,33 +332,31 @@ export async function deleteCourse(req, res) {
 
 // ---------- Admin: announcements ----------
 
-// In-memory store for MVP (no Announcement model yet — Phase 2 adds persistence)
-let _announcements = [];
-
 // GET /api/admin/announcements
 export async function listAnnouncements(req, res) {
-  res.json({ announcements: _announcements.slice().reverse() });
+  const announcements = await Announcement.find({ institutionId: req.user.institutionId })
+    .sort({ createdAt: -1 });
+  res.json({ announcements });
 }
 
 // POST /api/admin/announcements
 export async function createAnnouncement(req, res) {
-  const { title, body, audience } = req.body; // audience: "all" | "students" | "faculty"
+  const { title, body, audience } = req.body;
   if (!title || !body) return res.status(400).json({ error: "title and body required" });
-  const ann = {
-    id: Date.now().toString(),
+
+  const ann = await Announcement.create({
     title,
     body,
     audience: audience || "all",
     createdBy: req.user.userId,
-    createdAt: new Date().toISOString(),
-  };
-  _announcements.push(ann);
+    institutionId: req.user.institutionId,
+  });
 
   // Push in-app notification to all relevant users
   const roleFilter = audience === "students" ? "student" : audience === "faculty" ? "faculty" : null;
   const userFilter = { institutionId: req.user.institutionId };
   if (roleFilter) userFilter.role = roleFilter;
-  const users = await User.find(userFilter).select("userId");
+  const users = await User.find(userFilter).select("userId role");
   const { pushNotification } = await import("../utils/notify.js");
   await Promise.all(
     users.map((u) =>
@@ -377,20 +376,21 @@ export async function createAnnouncement(req, res) {
 
 // DELETE /api/admin/announcements/:id
 export async function deleteAnnouncement(req, res) {
-  _announcements = _announcements.filter((a) => a.id !== req.params.id);
+  await Announcement.findByIdAndDelete(req.params.id);
   res.json({ message: "Deleted" });
 }
 
-// GET /api/announcements — student/faculty-facing: returns announcements where audience matches
+// GET /api/announcements — student/faculty-facing
 export async function listStudentAnnouncements(req, res) {
   const role = req.user.role;
-  const visible = _announcements.filter((a) => {
-    if (a.audience === "all") return true;
-    if (a.audience === "students") return role === "student";
-    if (a.audience === "faculty") return role === "faculty";
-    return false;
-  });
-  res.json({ announcements: visible.slice().reverse() });
+  const announcements = await Announcement.find({
+    institutionId: req.user.institutionId,
+    $or: [
+      { audience: "all" },
+      { audience: role === "student" ? "students" : "faculty" },
+    ],
+  }).sort({ createdAt: -1 });
+  res.json({ announcements });
 }
 
 // ---------- Admin: reports ----------

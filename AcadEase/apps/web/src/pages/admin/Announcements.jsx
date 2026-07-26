@@ -106,7 +106,7 @@ export default function AdminAnnouncements() {
         ) : (
           <div className="space-y-3">
             {announcements.map((a) => (
-              <div key={a.id} className="bg-white border border-border rounded-card shadow-card p-5">
+              <div key={a._id} className="bg-white border border-border rounded-card shadow-card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -119,13 +119,8 @@ export default function AdminAnnouncements() {
                     <p className="text-xs text-text-muted mt-2">
                       {a.createdBy} · {new Date(a.createdAt).toLocaleString("en-IN")}
                     </p>
-                    {a.audience !== "all" && (
-                      <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-pill bg-signal/10 text-signal">
-                        {a.audience === "students" ? "For Students" : "For Faculty"}
-                      </span>
-                    )}
                   </div>
-                  <button onClick={() => remove(a.id)} className="w-7 h-7 shrink-0 bg-danger/10 text-danger rounded-lg flex items-center justify-center hover:bg-danger/20"><Trash2 size={13} /></button>
+                  <button onClick={() => remove(a._id)} className="w-7 h-7 shrink-0 bg-danger/10 text-danger rounded-lg flex items-center justify-center hover:bg-danger/20"><Trash2 size={13} /></button>
                 </div>
               </div>
             ))}

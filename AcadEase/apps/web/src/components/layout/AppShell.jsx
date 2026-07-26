@@ -16,12 +16,14 @@ const NAV_BY_ROLE = {
     { to: "/student/results",      label: "Results",      icon: ClipboardList },
     { to: "/student/certificates", label: "Certificates", icon: FileBadge },
     { to: "/student/grievances",   label: "Grievances",   icon: MessageSquareWarning },
+    { to: "/student/od-requests",  label: "OD Requests",  icon: ClipboardList },
   ],
   faculty: [
     { to: "/faculty/attendance",   label: "Mark Attendance", icon: CalendarCheck },
     { to: "/faculty/results",      label: "Results",         icon: ClipboardList },
     { to: "/faculty/od-requests",  label: "OD Requests",     icon: MessageSquareWarning },
     { to: "/admin/announcements",  label: "Announcements",   icon: Megaphone },
+    { to: "/faculty/profile",      label: "My Profile",      icon: User },
   ],
   admin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -34,6 +36,7 @@ const NAV_BY_ROLE = {
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
+    { to: "/admin/profile",      label: "My Profile",   icon: User },
   ],
   superadmin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -46,6 +49,7 @@ const NAV_BY_ROLE = {
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
+    { to: "/admin/profile",      label: "My Profile",   icon: User },
   ],
 };
 
@@ -187,8 +191,12 @@ export default function AppShell({ children }) {
             {/* Profile avatar — desktop */}
             <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/10">
               <button
-                onClick={() => user?.role === "student" ? navigate("/student/profile") : undefined}
-                className={`flex items-center gap-2 ${user?.role === "student" ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                onClick={() => {
+                  if (user?.role === "student") navigate("/student/profile");
+                  else if (user?.role === "faculty") navigate("/faculty/profile");
+                  else if (user?.role === "admin" || user?.role === "superadmin") navigate("/admin/profile");
+                }}
+                className="flex items-center gap-2 cursor-pointer hover:opacity-80"
               >
                 <div className="w-8 h-8 rounded-full bg-signal text-white flex items-center justify-center text-xs font-bold font-display">
                   {ini}
@@ -255,6 +263,22 @@ export default function AppShell({ children }) {
                     {user?.role === "student" && (
                       <button
                         onClick={() => { navigate("/student/profile"); setMobileOpen(false); }}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
+                      >
+                        <User size={17} /> My Profile
+                      </button>
+                    )}
+                    {user?.role === "faculty" && (
+                      <button
+                        onClick={() => { navigate("/faculty/profile"); setMobileOpen(false); }}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
+                      >
+                        <User size={17} /> My Profile
+                      </button>
+                    )}
+                    {(user?.role === "admin" || user?.role === "superadmin") && (
+                      <button
+                        onClick={() => { navigate("/admin/profile"); setMobileOpen(false); }}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
                       >
                         <User size={17} /> My Profile

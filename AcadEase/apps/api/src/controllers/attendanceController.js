@@ -123,6 +123,12 @@ export async function getStudentSummary(req, res) {
     }
   }
 
+  // Also include enrolled courses with zero attendance records
+  const enrollments = await Enrollment.find({ studentId, isActive: true });
+  for (const e of enrollments) {
+    if (!perCourse[e.courseId]) perCourse[e.courseId] = { total: 0, attended: 0 };
+  }
+
   const courses = await Course.find({ courseId: { $in: Object.keys(perCourse) } });
   const courseNameMap = Object.fromEntries(courses.map((c) => [c.courseId, c.name]));
 
@@ -271,11 +277,15 @@ export async function getCourseAnalytics(req, res) {
 // POST /api/attendance/od-request
 export async function submitOdRequest(req, res) {
   const studentId = req.user.userId;
-  const { courseId, facultyId, attendanceRecordId, date, reasonType, reasonDetails, supportingDocPath } = req.body;
+  const { courseId, attendanceRecordId, date, reasonType, reasonDetails, supportingDocPath } = req.body;
 
   if (!courseId || !date || !reasonType) {
     return res.status(400).json({ error: "courseId, date, and reasonType are required" });
   }
+
+  // Auto-resolve facultyId from the course
+  const course = await Course.findOne({ courseId });
+  const facultyId = req.body.facultyId || course?.facultyId || "";
 
   const odRequest = await ODRequest.create({
     studentId,

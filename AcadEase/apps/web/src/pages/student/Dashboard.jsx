@@ -192,10 +192,10 @@ export default function StudentDashboard() {
           )}
 
           {/* ── Announcements from faculty/admin ── */}
-          {announcements.filter((a) => !dismissedAnns.has(a.id)).length > 0 && (
+          {announcements.filter((a) => !dismissedAnns.has(a._id)).length > 0 && (
             <div className="space-y-2">
-              {announcements.filter((a) => !dismissedAnns.has(a.id)).slice(0, 3).map((ann) => (
-                <div key={ann.id} className="bg-signal/5 border border-signal/20 rounded-card p-4 shadow-card">
+              {announcements.filter((a) => !dismissedAnns.has(a._id)).slice(0, 3).map((ann) => (
+                <div key={ann._id} className="bg-signal/5 border border-signal/20 rounded-card p-4 shadow-card">
                   <div className="flex items-start gap-3">
                     <Megaphone size={18} className="text-signal mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -206,7 +206,7 @@ export default function StudentDashboard() {
                       </p>
                     </div>
                     <button
-                      onClick={() => setDismissedAnns((prev) => new Set(prev).add(ann.id))}
+                      onClick={() => setDismissedAnns((prev) => new Set(prev).add(ann._id))}
                       className="w-6 h-6 shrink-0 bg-border/30 text-text-muted rounded-lg flex items-center justify-center hover:bg-border hover:text-text-primary transition-colors"
                     >
                       <X size={12} />

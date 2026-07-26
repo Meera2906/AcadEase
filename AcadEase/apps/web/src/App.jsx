@@ -6,9 +6,11 @@ import StudentResults from "./pages/student/Results.jsx";
 import StudentCertificates from "./pages/student/Certificates.jsx";
 import StudentGrievances from "./pages/student/Grievances.jsx";
 import StudentProfile from "./pages/student/Profile.jsx";
+import StudentOdRequests from "./pages/student/OdRequests.jsx";
 import FacultyAttendanceMarking from "./pages/faculty/AttendanceMarking.jsx";
 import FacultyResultEntry from "./pages/faculty/ResultEntry.jsx";
 import FacultyOdRequests from "./pages/faculty/OdRequests.jsx";
+import FacultyProfile from "./pages/faculty/Profile.jsx";
 import AdminDashboard from "./pages/admin/Dashboard.jsx";
 import AdminUsers from "./pages/admin/Users.jsx";
 import AdminDepartments from "./pages/admin/Departments.jsx";
@@ -19,6 +21,7 @@ import AdminAnnouncements from "./pages/admin/Announcements.jsx";
 import AdminAttendance from "./pages/admin/Attendance.jsx";
 import AdminMarks from "./pages/admin/Marks.jsx";
 import AdminReports from "./pages/admin/Reports.jsx";
+import AdminProfile from "./pages/admin/Profile.jsx";
 import CertVerify from "./pages/verify/CertVerify.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 
@@ -37,6 +40,7 @@ export default function App() {
       <Route path="/student/results" element={<ProtectedRoute roles={["student"]}><StudentResults /></ProtectedRoute>} />
       <Route path="/student/certificates" element={<ProtectedRoute roles={["student"]}><StudentCertificates /></ProtectedRoute>} />
       <Route path="/student/grievances" element={<ProtectedRoute roles={["student"]}><StudentGrievances /></ProtectedRoute>} />
+      <Route path="/student/od-requests" element={<ProtectedRoute roles={["student"]}><StudentOdRequests /></ProtectedRoute>} />
 
       {/* Student own profile */}
       <Route path="/student/profile" element={<ProtectedRoute roles={["student"]}><StudentProfile /></ProtectedRoute>} />
@@ -55,6 +59,7 @@ export default function App() {
       <Route path="/faculty/attendance" element={<ProtectedRoute roles={["faculty"]}><FacultyAttendanceMarking /></ProtectedRoute>} />
       <Route path="/faculty/results" element={<ProtectedRoute roles={["faculty"]}><FacultyResultEntry /></ProtectedRoute>} />
       <Route path="/faculty/od-requests" element={<ProtectedRoute roles={["faculty"]}><FacultyOdRequests /></ProtectedRoute>} />
+      <Route path="/faculty/profile" element={<ProtectedRoute roles={["faculty"]}><FacultyProfile /></ProtectedRoute>} />
 
       {/* Admin / SuperAdmin — full module suite */}
       <Route path="/admin/dashboard" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminDashboard /></ProtectedRoute>} />
@@ -67,6 +72,7 @@ export default function App() {
       <Route path="/admin/marks" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
       <Route path="/admin/announcements" element={<ProtectedRoute roles={["admin", "superadmin", "faculty"]}><AdminAnnouncements /></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>} />
+      <Route path="/admin/profile" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminProfile /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

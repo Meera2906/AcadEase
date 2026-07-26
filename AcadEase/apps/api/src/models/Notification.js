@@ -15,6 +15,7 @@ const notificationSchema = new mongoose.Schema(
         "low_attendance_alert",
         "streak_milestone",
         "assessment_reminder",
+        "announcement",
       ],
       required: true,
     },

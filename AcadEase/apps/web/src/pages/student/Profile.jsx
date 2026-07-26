@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Flame, BookOpen, Mail, Phone, Hash, GraduationCap } from "lucide-react";
 import api from "../../api/client.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import AppShell from "../../components/layout/AppShell.jsx";
 import Card from "../../components/ui/Card.jsx";
 import Badge from "../../components/ui/Badge.jsx";
@@ -13,17 +14,39 @@ function getInitials(name = "") {
 
 export default function StudentProfile() {
   const { studentId } = useParams();
+  const { user } = useAuth();
   const navigate      = useNavigate();
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
 
   useEffect(() => {
-    api.get(`/admin/users/${studentId}`)
+    // Own profile: student visiting /student/profile (no studentId param)
+    // Admin/faculty view: /profile/:studentId
+    const isOwnProfile = !studentId;
+    const targetId = studentId || user?.userId;
+    if (!targetId) return;
+
+    const profilePromise = isOwnProfile
+      ? Promise.all([
+          api.get("/users/me"),
+          api.get(`/attendance/student/${targetId}/summary`).catch(() => ({ data: { overallPercentage: 0, subjects: [] } })),
+          api.get(`/gamification/xp/${targetId}`).catch(() => ({ data: { totalXp: 0, streak: 0 } })),
+        ]).then(([meRes, attRes, xpRes]) => ({
+          data: {
+            student: meRes.data.user,
+            attendance: attRes.data,
+            marks: [],
+            xp: xpRes.data,
+          },
+        }))
+      : api.get(`/admin/users/${targetId}`);
+
+    profilePromise
       .then((res) => setData(res.data))
-      .catch(() => setError("Could not load student profile."))
+      .catch(() => setError("Could not load profile."))
       .finally(() => setLoading(false));
-  }, [studentId]);
+  }, [studentId, user]);
 
   if (loading) {
     return (
@@ -38,10 +61,12 @@ export default function StudentProfile() {
   if (error || !data) {
     return (
       <AppShell>
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-4">
-          <ArrowLeft size={16} /> Back
-        </button>
-        <p className="text-danger text-sm">{error || "Student not found."}</p>
+        {studentId && (
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-4">
+            <ArrowLeft size={16} /> Back
+          </button>
+        )}
+        <p className="text-danger text-sm">{error || "Profile not found."}</p>
       </AppShell>
     );
   }
@@ -58,12 +83,14 @@ export default function StudentProfile() {
 
   return (
     <AppShell>
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-5 transition-colors"
-      >
-        <ArrowLeft size={16} /> Back
-      </button>
+      {studentId && (
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-5 transition-colors"
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
+      )}
 
       {/* Hero — ink-fade Campus Pass style */}
       <div className="relative overflow-hidden rounded-card bg-ink-fade p-6 md:p-8 mb-6">
