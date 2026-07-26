@@ -1,0 +1,14 @@
+export { default as User } from "./User.js";
+export { default as Department } from "./Department.js";
+export { default as Course } from "./Course.js";
+export { default as Enrollment } from "./Enrollment.js";
+export { default as AttendanceRecord } from "./AttendanceRecord.js";
+export { default as ODRequest } from "./ODRequest.js";
+export { default as Assessment } from "./Assessment.js";
+export { default as Marks } from "./Marks.js";
+export { default as Result } from "./Result.js";
+export { default as CertificateRequest } from "./CertificateRequest.js";
+export { default as Certificate } from "./Certificate.js";
+export { default as Grievance } from "./Grievance.js";
+export { default as Notification } from "./Notification.js";
+export { default as XpLedger } from "./XpLedger.js";

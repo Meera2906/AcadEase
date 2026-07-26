@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-paper text-text-primary font-sans;
+}
+
+h1, h2, h3, .font-display {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+}
+
+::selection {
+  background: #C6FF4D;
+  color: #14162B;
+}
+
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.06) rotate(-2deg); }
+}
+.animate-flame {
+  animation: flame-flicker 1.6s ease-in-out infinite;
+}
+
+.delay-1000 {
+  animation-delay: 1s;
+}
+
+.delay-2000 {
+  animation-delay: 2s;
+}
+
+@layer components {
+  .input {
+    @apply w-full border border-border rounded-card px-3 py-2 text-sm bg-white text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-signal/30 focus:border-signal transition-colors;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text-primary mb-1;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-text-primary mb-3;
+  }
+}
