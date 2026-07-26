@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
   FileBadge, MessageSquareWarning, Bell, LogOut,
-  GraduationCap, Menu, X, User,
+  GraduationCap, Menu, X, User, Users, Building2,
+  BookOpen, Megaphone, BarChart2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api from "../../api/client.js";
@@ -23,14 +24,27 @@ const NAV_BY_ROLE = {
   ],
   admin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
+    { to: "/admin/users",        label: "Users",        icon: Users },
+    { to: "/admin/departments",  label: "Departments",  icon: Building2 },
+    { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
+    { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
+    { to: "/admin/marks",        label: "Marks",        icon: ClipboardList },
     { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
+    { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
+    { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
   superadmin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
-    { to: "/admin/users",        label: "Users",        icon: ClipboardList },
+    { to: "/admin/users",        label: "Users",        icon: Users },
+    { to: "/admin/departments",  label: "Departments",  icon: Building2 },
+    { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
+    { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
+    { to: "/admin/marks",        label: "Marks",        icon: ClipboardList },
     { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
+    { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
+    { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
 };
 

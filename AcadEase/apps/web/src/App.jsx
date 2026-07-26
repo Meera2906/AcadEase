@@ -10,9 +10,15 @@ import FacultyAttendanceMarking from "./pages/faculty/AttendanceMarking.jsx";
 import FacultyResultEntry from "./pages/faculty/ResultEntry.jsx";
 import FacultyOdRequests from "./pages/faculty/OdRequests.jsx";
 import AdminDashboard from "./pages/admin/Dashboard.jsx";
+import AdminUsers from "./pages/admin/Users.jsx";
+import AdminDepartments from "./pages/admin/Departments.jsx";
+import AdminCourses from "./pages/admin/Courses.jsx";
 import AdminCertificates from "./pages/admin/Certificates.jsx";
 import AdminGrievances from "./pages/admin/Grievances.jsx";
-import PlaceholderPage from "./pages/PlaceholderPage.jsx";
+import AdminAnnouncements from "./pages/admin/Announcements.jsx";
+import AdminAttendance from "./pages/admin/Attendance.jsx";
+import AdminMarks from "./pages/admin/Marks.jsx";
+import AdminReports from "./pages/admin/Reports.jsx";
 import CertVerify from "./pages/verify/CertVerify.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 
@@ -50,11 +56,17 @@ export default function App() {
       <Route path="/faculty/results" element={<ProtectedRoute roles={["faculty"]}><FacultyResultEntry /></ProtectedRoute>} />
       <Route path="/faculty/od-requests" element={<ProtectedRoute roles={["faculty"]}><FacultyOdRequests /></ProtectedRoute>} />
 
-      {/* Admin / SuperAdmin */}
+      {/* Admin / SuperAdmin — full module suite */}
       <Route path="/admin/dashboard" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin/users" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminUsers /></ProtectedRoute>} />
+      <Route path="/admin/departments" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminDepartments /></ProtectedRoute>} />
+      <Route path="/admin/courses" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminCourses /></ProtectedRoute>} />
       <Route path="/admin/certificates" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminCertificates /></ProtectedRoute>} />
       <Route path="/admin/grievances" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminGrievances /></ProtectedRoute>} />
-      <Route path="/admin/users" element={<ProtectedRoute roles={["superadmin"]}><PlaceholderPage title="User Management" apiHint="GET/POST/PATCH /api/admin/users" /></ProtectedRoute>} />
+      <Route path="/admin/attendance" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminAttendance /></ProtectedRoute>} />
+      <Route path="/admin/marks" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
+      <Route path="/admin/announcements" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminAnnouncements /></ProtectedRoute>} />
+      <Route path="/admin/reports" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

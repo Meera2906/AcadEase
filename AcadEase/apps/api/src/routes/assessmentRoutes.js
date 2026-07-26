@@ -3,8 +3,10 @@ import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   listAssessments,
+  listAllAssessments,
   createAssessment,
   updateAssessment,
+  togglePublishMarks,
   submitMarks,
   editSingleMark,
   getStudentMarks,
@@ -17,10 +19,12 @@ import { enterSemesterResult, getStudentResults, getStudentSessions } from "../c
 const router = Router();
 router.use(requireAuth);
 
+router.get("/assessments", requireRole("admin", "superadmin"), asyncHandler(listAllAssessments));
 router.get("/assessments/mine", asyncHandler(getMyAssessments));
 router.get("/assessments/course/:courseId", asyncHandler(listAssessments));
 router.post("/assessments", requireRole("faculty"), asyncHandler(createAssessment));
 router.patch("/assessments/:id", requireRole("faculty"), asyncHandler(updateAssessment));
+router.patch("/assessments/:id/publish", requireRole("admin", "superadmin"), asyncHandler(togglePublishMarks));
 
 router.post("/marks/:assessmentId", requireRole("faculty"), asyncHandler(submitMarks));
 router.patch("/marks/:assessmentId/:studentId", requireRole("faculty", "admin"), asyncHandler(editSingleMark));

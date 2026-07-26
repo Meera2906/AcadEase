@@ -25,6 +25,23 @@ export async function createAssessment(req, res) {
   res.status(201).json({ assessment });
 }
 
+// GET /api/assessments — list all assessments (admin)
+export async function listAllAssessments(req, res) {
+  const assessments = await Assessment.find().sort({ createdAt: -1 });
+  res.json({ assessments });
+}
+
+// PATCH /api/assessments/:id/publish — toggle marks published (admin/superadmin)
+export async function togglePublishMarks(req, res) {
+  const { id } = req.params;
+  const { marksPublished } = req.body;
+  const assessment = await Assessment.findById(id);
+  if (!assessment) return res.status(404).json({ error: "Assessment not found" });
+  assessment.marksPublished = marksPublished !== undefined ? marksPublished : !assessment.marksPublished;
+  await assessment.save();
+  res.json({ assessment });
+}
+
 // PATCH /api/assessments/:id
 export async function updateAssessment(req, res) {
   const { id } = req.params;

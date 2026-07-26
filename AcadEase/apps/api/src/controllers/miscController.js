@@ -157,14 +157,21 @@ export async function bulkImportUsers(req, res) {
 // GET /api/admin/dashboard
 export async function getAdminDashboard(req, res) {
   const departmentId = req.user.departmentId;
+  const institutionId = req.user.institutionId;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [pendingCertificates, pendingGrievances, todaysAttendance] = await Promise.all([
+  const [
+    totalStudents, totalFaculty,
+    pendingCertificates, pendingGrievances,
+    todaysAttendance,
+  ] = await Promise.all([
+    User.countDocuments({ role: "student", institutionId }),
+    User.countDocuments({ role: "faculty", institutionId }),
     CertificateRequest.countDocuments({ status: "pending" }),
     Grievance.countDocuments({ departmentId, status: { $in: ["Open", "In Review"] } }),
-    AttendanceRecord.find({ date: today }),
+    AttendanceRecord.find({ date: { $gte: today } }),
   ]);
 
   const courses = await Course.find({ departmentId });
@@ -188,13 +195,22 @@ export async function getAdminDashboard(req, res) {
   const avgAttendance = percentages.length ? percentages.reduce((a, b) => a + b, 0) / percentages.length : 0;
   const chronicAbsentees = Object.entries(perStudent).filter(([, s]) => s.total && s.attended / s.total < 0.65).length;
 
+  // Recent grievances
+  const recentGrievances = await Grievance.find({ departmentId }).sort({ createdAt: -1 }).limit(5);
+  // Recent certificate requests
+  const recentCertRequests = await CertificateRequest.find().sort({ createdAt: -1 }).limit(5);
+
   res.json({
+    totalStudents,
+    totalFaculty,
     departmentAverageAttendanceToday: Math.round(avgAttendance * 10) / 10,
     chronicAbsenteeCount: chronicAbsentees,
     pendingCertificates,
     pendingGrievances,
     resultsPendingCount: assessmentsPending,
     todaysClassesMarked: todaysAttendance.length,
+    recentGrievances,
+    recentCertRequests,
   });
 }
 
@@ -242,6 +258,177 @@ export async function getStudentProfile(req, res) {
     marks,
     xp: { totalXp, streak },
   });
+}
+
+// ---------- Admin: departments ----------
+
+// GET /api/admin/departments
+export async function listDepartments(req, res) {
+  const { Department } = await import("../models/index.js");
+  const departments = await Department.find({ institutionId: req.user.institutionId });
+  res.json({ departments });
+}
+
+// POST /api/admin/departments
+export async function createDepartment(req, res) {
+  const { Department } = await import("../models/index.js");
+  const { departmentId, name, code, hodId } = req.body;
+  if (!departmentId || !name || !code) return res.status(400).json({ error: "departmentId, name, code required" });
+  const dept = await Department.create({ departmentId, name, code, hodId, institutionId: req.user.institutionId });
+  res.status(201).json({ department: dept });
+}
+
+// PATCH /api/admin/departments/:id
+export async function updateDepartment(req, res) {
+  const { Department } = await import("../models/index.js");
+  const dept = await Department.findById(req.params.id);
+  if (!dept) return res.status(404).json({ error: "Department not found" });
+  Object.assign(dept, req.body);
+  await dept.save();
+  res.json({ department: dept });
+}
+
+// ---------- Admin: courses ----------
+
+// GET /api/admin/courses
+export async function listCourses(req, res) {
+  const filter = { institutionId: req.user.institutionId };
+  if (req.query.departmentId) filter.departmentId = req.query.departmentId;
+  const courses = await Course.find(filter).sort({ departmentId: 1, semester: 1 });
+  res.json({ courses });
+}
+
+// POST /api/admin/courses
+export async function createCourse(req, res) {
+  const { courseId, name, departmentId, semester, section, facultyId, academicYear } = req.body;
+  if (!courseId || !name || !departmentId || !semester || !facultyId) {
+    return res.status(400).json({ error: "courseId, name, departmentId, semester, facultyId required" });
+  }
+  const course = await Course.create({
+    courseId, name, departmentId, semester,
+    section: section || "A",
+    facultyId,
+    academicYear: academicYear || "2024-2025",
+    institutionId: req.user.institutionId,
+  });
+  res.status(201).json({ course });
+}
+
+// PATCH /api/admin/courses/:id
+export async function updateCourse(req, res) {
+  const course = await Course.findById(req.params.id);
+  if (!course) return res.status(404).json({ error: "Course not found" });
+  Object.assign(course, req.body);
+  await course.save();
+  res.json({ course });
+}
+
+// DELETE /api/admin/courses/:id
+export async function deleteCourse(req, res) {
+  await Course.findByIdAndDelete(req.params.id);
+  res.json({ message: "Course deleted" });
+}
+
+// ---------- Admin: announcements ----------
+
+// In-memory store for MVP (no Announcement model yet — Phase 2 adds persistence)
+let _announcements = [];
+
+// GET /api/admin/announcements
+export async function listAnnouncements(req, res) {
+  res.json({ announcements: _announcements.slice().reverse() });
+}
+
+// POST /api/admin/announcements
+export async function createAnnouncement(req, res) {
+  const { title, body, audience } = req.body; // audience: "all" | "students" | "faculty"
+  if (!title || !body) return res.status(400).json({ error: "title and body required" });
+  const ann = {
+    id: Date.now().toString(),
+    title,
+    body,
+    audience: audience || "all",
+    createdBy: req.user.userId,
+    createdAt: new Date().toISOString(),
+  };
+  _announcements.push(ann);
+
+  // Push in-app notification to all relevant users
+  const roleFilter = audience === "students" ? "student" : audience === "faculty" ? "faculty" : null;
+  const userFilter = { institutionId: req.user.institutionId };
+  if (roleFilter) userFilter.role = roleFilter;
+  const users = await User.find(userFilter).select("userId");
+  const { pushNotification } = await import("../utils/notify.js");
+  await Promise.all(
+    users.map((u) =>
+      pushNotification({ userId: u.userId, type: "announcement", priority: "medium", title, message: body, linkTo: "/admin/announcements" })
+    )
+  );
+
+  res.status(201).json({ announcement: ann });
+}
+
+// DELETE /api/admin/announcements/:id
+export async function deleteAnnouncement(req, res) {
+  _announcements = _announcements.filter((a) => a.id !== req.params.id);
+  res.json({ message: "Deleted" });
+}
+
+// ---------- Admin: reports ----------
+
+// GET /api/admin/reports/attendance  — per-student attendance summary for dept
+export async function getAttendanceReport(req, res) {
+  const { AttendanceRecord, Enrollment } = await import("../models/index.js");
+  const departmentId = req.query.departmentId || req.user.departmentId;
+  const students = await User.find({ role: "student", departmentId }).select("userId name enrollmentNumber semester section");
+  const studentIds = students.map((s) => s.userId);
+  const records = await AttendanceRecord.find({ studentId: { $in: studentIds }, status: { $ne: "holiday" } });
+
+  const perStudent = {};
+  for (const r of records) {
+    if (!perStudent[r.studentId]) perStudent[r.studentId] = { total: 0, attended: 0 };
+    perStudent[r.studentId].total += 1;
+    if (["present", "od", "late"].includes(r.status)) perStudent[r.studentId].attended += 1;
+  }
+
+  const report = students.map((s) => {
+    const d = perStudent[s.userId] || { total: 0, attended: 0 };
+    return {
+      studentId: s.userId,
+      name: s.name,
+      enrollmentNumber: s.enrollmentNumber,
+      semester: s.semester,
+      section: s.section,
+      total: d.total,
+      attended: d.attended,
+      percentage: d.total ? Math.round((d.attended / d.total) * 1000) / 10 : 0,
+      status: d.total === 0 ? "no-data" : d.attended / d.total < 0.65 ? "chronic" : d.attended / d.total < 0.75 ? "danger" : d.attended / d.total < 0.85 ? "warning" : "good",
+    };
+  }).sort((a, b) => a.percentage - b.percentage);
+
+  res.json({ report, departmentId });
+}
+
+// GET /api/admin/reports/marks  — per-course average marks
+export async function getMarksReport(req, res) {
+  const { Assessment, Marks } = await import("../models/index.js");
+  const departmentId = req.query.departmentId || req.user.departmentId;
+  const courses = await Course.find({ departmentId });
+  const report = await Promise.all(
+    courses.map(async (c) => {
+      const assessments = await Assessment.find({ courseId: c.courseId, marksPublished: true });
+      const assessmentData = await Promise.all(
+        assessments.map(async (a) => {
+          const marks = await Marks.find({ assessmentId: a._id, isAbsent: false, marksObtained: { $ne: null } });
+          const values = marks.map((m) => m.marksObtained);
+          const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+          return { type: a.type, title: a.title, maxMarks: a.maxMarks, avg: Math.round(avg * 10) / 10, count: values.length };
+        })
+      );
+      return { courseId: c.courseId, courseName: c.name, assessments: assessmentData };
+    })
+  );
+  res.json({ report });
 }
 
 // ---------- Gamification ----------
