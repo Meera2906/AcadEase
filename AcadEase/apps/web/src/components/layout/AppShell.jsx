@@ -21,6 +21,7 @@ const NAV_BY_ROLE = {
     { to: "/faculty/attendance",   label: "Mark Attendance", icon: CalendarCheck },
     { to: "/faculty/results",      label: "Results",         icon: ClipboardList },
     { to: "/faculty/od-requests",  label: "OD Requests",     icon: MessageSquareWarning },
+    { to: "/admin/announcements",  label: "Announcements",   icon: Megaphone },
   ],
   admin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },

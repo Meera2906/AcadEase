@@ -9,6 +9,7 @@ import {
   listDepartments, createDepartment, updateDepartment,
   listCourses, createCourse, updateCourse, deleteCourse,
   listAnnouncements, createAnnouncement, deleteAnnouncement,
+  listStudentAnnouncements,
   getAttendanceReport, getMarksReport,
   getStudentXp, getLeaderboard,
 } from "../controllers/miscController.js";
@@ -50,8 +51,11 @@ router.delete("/admin/courses/:id", requireRole("admin", "superadmin"), asyncHan
 
 // Admin: announcements
 router.get("/admin/announcements", asyncHandler(listAnnouncements));
-router.post("/admin/announcements", requireRole("admin", "superadmin"), asyncHandler(createAnnouncement));
+router.post("/admin/announcements", requireRole("admin", "superadmin", "faculty"), asyncHandler(createAnnouncement));
 router.delete("/admin/announcements/:id", requireRole("admin", "superadmin"), asyncHandler(deleteAnnouncement));
+
+// Student/Faculty: view announcements targeted to their role
+router.get("/announcements", asyncHandler(listStudentAnnouncements));
 
 // Admin: reports
 router.get("/admin/reports/attendance", requireRole("admin", "superadmin"), asyncHandler(getAttendanceReport));

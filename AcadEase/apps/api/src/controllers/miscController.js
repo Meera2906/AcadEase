@@ -361,7 +361,14 @@ export async function createAnnouncement(req, res) {
   const { pushNotification } = await import("../utils/notify.js");
   await Promise.all(
     users.map((u) =>
-      pushNotification({ userId: u.userId, type: "announcement", priority: "medium", title, message: body, linkTo: "/admin/announcements" })
+      pushNotification({
+        userId: u.userId,
+        type: "announcement",
+        priority: "medium",
+        title,
+        message: body,
+        linkTo: u.role === "student" ? "/student/dashboard" : "/admin/announcements",
+      })
     )
   );
 
@@ -372,6 +379,18 @@ export async function createAnnouncement(req, res) {
 export async function deleteAnnouncement(req, res) {
   _announcements = _announcements.filter((a) => a.id !== req.params.id);
   res.json({ message: "Deleted" });
+}
+
+// GET /api/announcements — student/faculty-facing: returns announcements where audience matches
+export async function listStudentAnnouncements(req, res) {
+  const role = req.user.role;
+  const visible = _announcements.filter((a) => {
+    if (a.audience === "all") return true;
+    if (a.audience === "students") return role === "student";
+    if (a.audience === "faculty") return role === "faculty";
+    return false;
+  });
+  res.json({ announcements: visible.slice().reverse() });
 }
 
 // ---------- Admin: reports ----------

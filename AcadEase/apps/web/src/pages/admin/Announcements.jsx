@@ -119,6 +119,11 @@ export default function AdminAnnouncements() {
                     <p className="text-xs text-text-muted mt-2">
                       {a.createdBy} · {new Date(a.createdAt).toLocaleString("en-IN")}
                     </p>
+                    {a.audience !== "all" && (
+                      <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-pill bg-signal/10 text-signal">
+                        {a.audience === "students" ? "For Students" : "For Faculty"}
+                      </span>
+                    )}
                   </div>
                   <button onClick={() => remove(a.id)} className="w-7 h-7 shrink-0 bg-danger/10 text-danger rounded-lg flex items-center justify-center hover:bg-danger/20"><Trash2 size={13} /></button>
                 </div>

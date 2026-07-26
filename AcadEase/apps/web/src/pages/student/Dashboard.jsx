@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle, Flame, Zap, Trophy, TrendingUp,
   CalendarCheck, ClipboardList, FileBadge, MessageSquareWarning,
-  ChevronRight, BookOpen, Clock,
+  ChevronRight, BookOpen, Clock, Megaphone, X,
 } from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -122,6 +122,8 @@ export default function StudentDashboard() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [assessments, setAssessments] = useState([]);
   const [todaySchedule, setTodaySchedule] = useState(null);
+  const [announcements, setAnnouncements] = useState([]);
+  const [dismissedAnns, setDismissedAnns] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -133,13 +135,15 @@ export default function StudentDashboard() {
       api.get("/gamification/leaderboard").catch(() => ({ data: { leaderboard: [] } })),
       api.get("/assessments/mine").catch(() => ({ data: { assessments: [] } })),
       api.get(`/attendance/today-schedule/${user.userId}`).catch(() => ({ data: null })),
-    ]).then(([s, x, m, lb, a, ts]) => {
+      api.get("/announcements").catch(() => ({ data: { announcements: [] } })),
+    ]).then(([s, x, m, lb, a, ts, anns]) => {
       setSummary(s.data);
       setXp(x.data);
       setMarks(m.data.marks || []);
       setLeaderboard(lb.data.leaderboard || []);
       setAssessments(a.data.assessments || []);
       setTodaySchedule(ts.data);
+      setAnnouncements(anns.data.announcements || []);
     }).finally(() => setLoading(false));
   }, [user]);
 
@@ -184,6 +188,32 @@ export default function StudentDashboard() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* ── Announcements from faculty/admin ── */}
+          {announcements.filter((a) => !dismissedAnns.has(a.id)).length > 0 && (
+            <div className="space-y-2">
+              {announcements.filter((a) => !dismissedAnns.has(a.id)).slice(0, 3).map((ann) => (
+                <div key={ann.id} className="bg-signal/5 border border-signal/20 rounded-card p-4 shadow-card">
+                  <div className="flex items-start gap-3">
+                    <Megaphone size={18} className="text-signal mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-text-primary">{ann.title}</p>
+                      <p className="text-sm text-text-secondary mt-0.5 line-clamp-2">{ann.body}</p>
+                      <p className="text-xs text-text-muted mt-1">
+                        {ann.createdBy} · {new Date(ann.createdAt).toLocaleDateString("en-IN")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDismissedAnns((prev) => new Set(prev).add(ann.id))}
+                      className="w-6 h-6 shrink-0 bg-border/30 text-text-muted rounded-lg flex items-center justify-center hover:bg-border hover:text-text-primary transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
