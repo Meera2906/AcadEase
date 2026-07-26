@@ -13,6 +13,7 @@ import {
   getMyAssessments,
   getLeaderboard,
   getCourseMarksSummary,
+  getAssessmentStudents,
 } from "../controllers/assessmentController.js";
 import { enterSemesterResult, getStudentResults, getStudentSessions } from "../controllers/resultController.js";
 
@@ -29,6 +30,7 @@ router.patch("/assessments/:id/publish", requireRole("admin", "superadmin"), asy
 router.post("/marks/:assessmentId", requireRole("faculty"), asyncHandler(submitMarks));
 router.patch("/marks/:assessmentId/:studentId", requireRole("faculty", "admin"), asyncHandler(editSingleMark));
 router.get("/marks/student/:studentId", asyncHandler(getStudentMarks));
+router.get("/marks/assessment/:assessmentId/students", requireRole("faculty", "admin"), asyncHandler(getAssessmentStudents));
 router.get("/marks/assessment/:assessmentId/leaderboard", asyncHandler(getLeaderboard));
 router.get("/marks/course/:courseId/summary", requireRole("faculty", "admin"), asyncHandler(getCourseMarksSummary));
 

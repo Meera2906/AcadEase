@@ -172,6 +172,33 @@ export async function getLeaderboard(req, res) {
   res.json({ assessmentId, leaderboard: ranked.slice(0, 10), fullRanking: ranked });
 }
 
+// GET /api/marks/assessment/:assessmentId/students  — enrolled students with existing marks
+export async function getAssessmentStudents(req, res) {
+  const { assessmentId } = req.params;
+  const assessment = await Assessment.findById(assessmentId);
+  if (!assessment) return res.status(404).json({ error: "Assessment not found" });
+
+  const enrollments = await Enrollment.find({ courseId: assessment.courseId, isActive: true });
+  const studentIds = enrollments.map((e) => e.studentId);
+  const students = await User.find({ userId: { $in: studentIds } })
+    .select("userId name enrollmentNumber resumePath")
+    .sort({ name: 1 });
+
+  const existingMarks = await Marks.find({ assessmentId });
+  const marksMap = Object.fromEntries(existingMarks.map((m) => [m.studentId, m]));
+
+  const rows = students.map((s) => ({
+    studentId: s.userId,
+    name: s.name,
+    enrollmentNumber: s.enrollmentNumber || s.userId,
+    resumePath: s.resumePath || null,
+    marksObtained: marksMap[s.userId]?.marksObtained ?? "",
+    isAbsent: marksMap[s.userId]?.isAbsent ?? false,
+  }));
+
+  res.json({ rows, maxMarks: assessment.maxMarks });
+}
+
 // GET /api/marks/course/:courseId/summary
 export async function getCourseMarksSummary(req, res) {
   const { courseId } = req.params;

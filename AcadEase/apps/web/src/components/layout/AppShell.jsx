@@ -94,6 +94,17 @@ export default function AppShell({ children }) {
     } catch {}
   }
 
+  async function handleNotificationClick(n) {
+    setBellOpen(false);
+    if (!n.read) {
+      try {
+        await api.patch(`/notifications/${n._id}/read`);
+        setNotifications((prev) => prev.map((x) => x._id === n._id ? { ...x, read: true } : x));
+      } catch {}
+    }
+    if (n.linkTo) navigate(n.linkTo);
+  }
+
   const unread = notifications.filter((n) => !n.read).length;
   const ini = getInitials(user?.name);
 
@@ -176,12 +187,26 @@ export default function AppShell({ children }) {
                       <p className="text-xs text-text-muted px-4 py-4 text-center">No notifications yet.</p>
                     )}
                     {notifications.map((n) => (
-                      <div key={n._id} className={`px-4 py-3 ${n.read ? "bg-card" : "bg-[#EEF1FF]"}`}>
-                        <p className={`text-sm ${n.read ? "text-text-secondary" : "text-text-primary font-medium"}`}>
-                          {n.title}
-                        </p>
-                        <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{n.message}</p>
-                      </div>
+                      <button
+                        key={n._id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`w-full text-left px-4 py-3 transition-colors hover:bg-signal/5 ${
+                          n.read ? "bg-card" : "bg-[#EEF1FF]"
+                        } ${n.linkTo ? "cursor-pointer" : "cursor-default"}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-signal shrink-0" />}
+                          <div className={n.read ? "" : ""}>
+                            <p className={`text-sm ${n.read ? "text-text-secondary" : "text-text-primary font-medium"}`}>
+                              {n.title}
+                            </p>
+                            <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{n.message}</p>
+                            {n.linkTo && !n.read && (
+                              <p className="text-xs text-signal mt-1">Tap to view →</p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 </div>

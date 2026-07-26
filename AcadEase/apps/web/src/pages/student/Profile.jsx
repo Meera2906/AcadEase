@@ -1,29 +1,42 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Flame, BookOpen, Mail, Phone, Hash, GraduationCap } from "lucide-react";
+import {
+  ArrowLeft, Flame, FileText, Upload, Trash2, ExternalLink,
+  Edit2, Save, X, Building2, Calendar, Layers, Grid3X3, Linkedin,
+} from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import AppShell from "../../components/layout/AppShell.jsx";
 import Card from "../../components/ui/Card.jsx";
-import Badge from "../../components/ui/Badge.jsx";
-import AttendanceRing from "../../components/ui/AttendanceRing.jsx";
 
 function getInitials(name = "") {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
+const TABS = ["Personal Info", "Academic", "Resume"];
+
 export default function StudentProfile() {
   const { studentId } = useParams();
   const { user } = useAuth();
-  const navigate      = useNavigate();
-  const [data, setData]     = useState(null);
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("Personal Info");
+  const isOwnProfile = !studentId;
+
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeMsg, setResumeMsg] = useState("");
+  const [resumePath, setResumePath] = useState(null);
+  const [showResumePdf, setShowResumePdf] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+  const [form, setForm] = useState({});
 
   useEffect(() => {
-    // Own profile: student visiting /student/profile (no studentId param)
-    // Admin/faculty view: /profile/:studentId
-    const isOwnProfile = !studentId;
     const targetId = studentId || user?.userId;
     if (!targetId) return;
 
@@ -43,16 +56,93 @@ export default function StudentProfile() {
       : api.get(`/admin/users/${targetId}`);
 
     profilePromise
-      .then((res) => setData(res.data))
+      .then((res) => {
+        setData(res.data);
+        const s = res.data.student;
+        if (s?.resumePath) setResumePath(s.resumePath);
+        setForm({
+          name: s?.name || "",
+          email: s?.email || "",
+          enrollmentNumber: s?.enrollmentNumber || "",
+          dob: s?.dob || "",
+          phone: s?.phone || "",
+          linkedin: s?.linkedin || "",
+          tenth: s?.tenth ?? "",
+          twelfth: s?.twelfth ?? "",
+          diploma: s?.diploma ?? "",
+          ugPercentage: s?.ugPercentage ?? "",
+          backlogs: s?.backlogs ?? "",
+          currentBacklogs: s?.currentBacklogs ?? "",
+          interests: s?.interests || "",
+        });
+      })
       .catch(() => setError("Could not load profile."))
       .finally(() => setLoading(false));
   }, [studentId, user]);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveMsg("");
+    try {
+      const payload = {
+        phone: form.phone,
+        dob: form.dob,
+        linkedin: form.linkedin,
+        tenth: form.tenth === "" ? null : Number(form.tenth),
+        twelfth: form.twelfth === "" ? null : Number(form.twelfth),
+        diploma: form.diploma === "" ? null : Number(form.diploma),
+        ugPercentage: form.ugPercentage === "" ? null : Number(form.ugPercentage),
+        backlogs: form.backlogs === "" ? 0 : Number(form.backlogs),
+        currentBacklogs: form.currentBacklogs === "" ? 0 : Number(form.currentBacklogs),
+        interests: form.interests,
+      };
+      const res = await api.patch("/users/me", payload);
+      setData((prev) => ({ ...prev, student: res.data.user }));
+      setSaveMsg("Profile saved.");
+      setEditing(false);
+    } catch {
+      setSaveMsg("Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResumeUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResumeUploading(true);
+    setResumeMsg("");
+    const formData = new FormData();
+    formData.append("resume", file);
+    try {
+      const res = await api.post("/users/me/resume", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      setResumePath(res.data.resumePath);
+      setResumeMsg("Resume uploaded successfully.");
+    } catch {
+      setResumeMsg("Upload failed. Max 5 MB, PDF/DOC/DOCX only.");
+    } finally {
+      setResumeUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleResumeDelete() {
+    if (!window.confirm("Delete your resume?")) return;
+    try {
+      await api.delete("/users/me/resume");
+      setResumePath(null);
+      setShowResumePdf(false);
+      setResumeMsg("Resume deleted.");
+    } catch {
+      setResumeMsg("Failed to delete resume.");
+    }
+  }
 
   if (loading) {
     return (
       <AppShell>
         <div className="space-y-4">
-          {[1,2,3].map((i) => <div key={i} className="h-24 bg-white border border-border rounded-card animate-pulse" />)}
+          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-white border border-border rounded-card animate-pulse" />)}
         </div>
       </AppShell>
     );
@@ -71,153 +161,296 @@ export default function StudentProfile() {
     );
   }
 
-  const { student, attendance, marks, xp } = data;
-  const overall = attendance?.overallPercentage ?? 0;
+  const { student, xp } = data;
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
+  const resumeUrl = resumePath ? `${apiBase}/${resumePath}` : null;
 
-  const marksByCourse = {};
-  for (const m of marks || []) {
-    const cid = m.courseId || m.assessmentId?.courseId || "Unknown";
-    if (!marksByCourse[cid]) marksByCourse[cid] = [];
-    marksByCourse[cid].push(m);
-  }
+  const college = student.college || "Sri Krishna College of Engineering and Technology";
+  const batch = student.batch || (student.batchYear ? `${student.batchYear}-${student.batchYear + 4}` : "2024-2028");
+  const department = student.department || student.departmentId || "BTech Artificial Intelligence and Data Science";
+  const section = student.section || "E";
 
   return (
     <AppShell>
       {studentId && (
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-5 transition-colors"
-        >
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-secondary hover:text-signal mb-5 transition-colors">
           <ArrowLeft size={16} /> Back
         </button>
       )}
 
-      {/* Hero — ink-fade Campus Pass style */}
-      <div className="relative overflow-hidden rounded-card bg-ink-fade p-6 md:p-8 mb-6">
-        <div className="absolute -top-16 -right-10 w-56 h-56 rounded-full bg-signal/20 blur-3xl" />
-        <div className="absolute -bottom-20 left-1/3 w-56 h-56 rounded-full bg-citrus/10 blur-3xl" />
+      {/* Page heading */}
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-text-primary">Student Profile</h1>
+        <p className="text-sm text-text-secondary mt-0.5">Manage your personal information</p>
+      </div>
 
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-signal/80 border-2 border-white/20 text-white flex items-center justify-center font-display text-xl font-bold shrink-0">
+      {/* Two-column layout */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+
+        {/* ── LEFT SIDEBAR ── */}
+        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
+
+          {/* Avatar + name + roll */}
+          <Card className="p-6 flex flex-col items-center text-center gap-3">
+            <div className="w-20 h-20 rounded-full bg-signal/80 border-4 border-signal/20 text-white flex items-center justify-center font-display text-2xl font-bold">
               {getInitials(student.name)}
             </div>
             <div>
-              <p className="text-white/50 text-xs font-mono tracking-wider mb-1">STUDENT PROFILE</p>
-              <p className="font-display text-xl font-bold text-white">{student.name}</p>
-              <p className="text-white/50 text-sm font-mono mt-0.5">{student.enrollmentNumber}</p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <InfoChip icon={GraduationCap} text={`Sem ${student.semester} · Sec ${student.section}`} />
-                <InfoChip icon={Mail} text={student.email} />
-                {student.phone && <InfoChip icon={Phone} text={student.phone} />}
-                <InfoChip icon={Hash} text={student.departmentId} />
-              </div>
+              <p className="font-display text-base font-bold text-text-primary leading-tight">{student.name}</p>
+              <p className="text-xs text-text-secondary mt-0.5">{student.name}</p>
+              <p className="text-xs font-mono text-text-muted mt-1">{student.enrollmentNumber}</p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-6">
             {xp?.streak > 0 && (
-              <div className="flex items-center gap-2 bg-white/10 rounded-pill px-4 py-2">
-                <Flame size={16} className="text-citrus" />
-                <p className="text-white font-display font-bold text-sm">{xp.streak} day streak</p>
+              <div className="flex items-center gap-1.5 bg-citrus/10 rounded-full px-3 py-1">
+                <Flame size={13} className="text-citrus" />
+                <span className="text-xs font-semibold text-citrus">{xp.streak} day streak</span>
               </div>
             )}
-            <AttendanceRing percentage={overall} label="OVERALL" dark />
-          </div>
-        </div>
-      </div>
-
-      {/* XP mini stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <MiniStat label="Overall Attendance" value={`${overall}%`}
-          color={overall < 75 ? "text-danger" : overall < 85 ? "text-warning" : "text-success"} />
-        <MiniStat label="Streak" value={`${xp?.streak ?? 0} days`} color="text-warning"
-          icon={<Flame size={14} className="text-warning" />} />
-        <MiniStat label="Academic XP" value={xp?.totalXp ?? 0} color="text-teal"
-          icon={<BookOpen size={14} className="text-teal" />} />
-        <MiniStat label="Batch Year" value={student.batchYear ?? "—"} color="text-signal" />
-      </div>
-
-      {/* Attendance per subject */}
-      <h2 className="font-display text-lg font-semibold text-text-primary mb-3">Attendance by Subject</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {attendance?.subjects?.map((s) => (
-          <Card key={s.courseId} className="flex items-center gap-4 p-5">
-            <AttendanceRing percentage={s.percentage} size={68} stroke={6} />
-            <div className="min-w-0">
-              <p className="font-semibold text-text-primary truncate text-sm">{s.courseName}</p>
-              <p className="text-xs text-text-muted mt-0.5">{s.attended} / {s.total} classes</p>
-              {s.percentage < 65 && (
-                <p className="text-xs text-danger font-medium mt-1">⚠ Chronic absentee</p>
-              )}
-            </div>
           </Card>
-        ))}
-        {!attendance?.subjects?.length && (
-          <p className="text-text-muted text-sm">No attendance records.</p>
-        )}
-      </div>
 
-      {/* Marks */}
-      {Object.keys(marksByCourse).length > 0 && (
-        <>
-          <h2 className="font-display text-lg font-semibold text-text-primary mb-3">Assessment Marks</h2>
-          <div className="space-y-4">
-            {Object.entries(marksByCourse).map(([courseId, entries]) => {
-              const totalObtained = entries.reduce((s, e) => s + (e.marksObtained ?? 0), 0);
-              const totalMax      = entries.reduce((s, e) => s + (e.assessmentId?.maxMarks ?? 0), 0);
-              return (
-                <Card key={courseId} className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="font-semibold text-text-primary text-sm font-mono">{courseId}</p>
-                    {totalMax > 0 && (
-                      <span className="text-xs text-text-muted">{totalObtained} / {totalMax} total</span>
+          {/* Non-editable info cards */}
+          <InfoCard icon={Building2} label="College" value={college} />
+          <InfoCard icon={Calendar} label="Batch" value={batch} />
+          <InfoCard icon={Layers} label="Department" value={department} />
+          <InfoCard icon={Grid3X3} label="Section" value={section} />
+        </div>
+
+        {/* ── RIGHT PANEL ── */}
+        <div className="flex-1 min-w-0">
+
+          {/* Tab bar + action buttons */}
+          <div className="flex items-center justify-between mb-5 border-b border-border">
+            <div className="flex gap-1">
+              {TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${
+                    activeTab === tab
+                      ? "border-signal text-signal"
+                      : "border-transparent text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {isOwnProfile && activeTab !== "Resume" && (
+              <div className="flex gap-2 pb-1">
+                {!editing ? (
+                  <button
+                    onClick={() => { setEditing(true); setSaveMsg(""); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-signal text-white rounded-lg text-xs font-semibold hover:bg-signal/90 transition-colors"
+                  >
+                    <Edit2 size={12} /> Edit Profile
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-signal text-white rounded-lg text-xs font-semibold hover:bg-signal/90 transition-colors disabled:opacity-60"
+                    >
+                      <Save size={12} /> {saving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => { setEditing(false); setSaveMsg(""); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-paper border border-border text-text-secondary rounded-lg text-xs font-semibold hover:text-text-primary transition-colors"
+                    >
+                      <X size={12} /> Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {saveMsg && (
+            <p className={`text-xs mb-4 ${saveMsg.includes("Failed") ? "text-danger" : "text-success"}`}>{saveMsg}</p>
+          )}
+
+          {/* Tab: Personal Info */}
+          {activeTab === "Personal Info" && (
+            <Card className="p-6">
+              <h2 className="font-display text-base font-bold text-text-primary mb-5">Personal Information</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Field label="Full Name *" value={form.name} editing={false} />
+                <Field label="Email *" value={form.email} editing={false} />
+                <Field label="Roll Number *" value={form.enrollmentNumber} editing={false} />
+                <Field
+                  label="Date of Birth *"
+                  value={form.dob}
+                  editing={editing}
+                  type="date"
+                  onChange={(v) => setForm((p) => ({ ...p, dob: v }))}
+                />
+                <Field
+                  label="Contact Number *"
+                  value={form.phone}
+                  editing={editing}
+                  onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
+                />
+                <Field
+                  label="LinkedIn"
+                  value={form.linkedin}
+                  editing={editing}
+                  onChange={(v) => setForm((p) => ({ ...p, linkedin: v }))}
+                  isLink
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* Tab: Academic */}
+          {activeTab === "Academic" && (
+            <Card className="p-6">
+              <h2 className="font-display text-base font-bold text-text-primary mb-5">Academic Information</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Field label="10th Percentage :" value={form.tenth} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, tenth: v }))} />
+                <Field label="12th Percentage :" value={form.twelfth} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, twelfth: v }))} />
+                <Field label="Diploma Percentage :" value={form.diploma} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, diploma: v }))} />
+                <Field label="Undergraduate Percentage :" value={form.ugPercentage} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, ugPercentage: v }))} />
+                <Field label="Backlogs History :" value={form.backlogs} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, backlogs: v }))} />
+                <Field label="Current Backlogs :" value={form.currentBacklogs} editing={editing} type="number" onChange={(v) => setForm((p) => ({ ...p, currentBacklogs: v }))} />
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Interests :</label>
+                  {editing ? (
+                    <textarea
+                      value={form.interests}
+                      onChange={(e) => setForm((p) => ({ ...p, interests: e.target.value }))}
+                      rows={3}
+                      className="input w-full resize-none"
+                      placeholder="e.g. Machine Learning, Web Development…"
+                    />
+                  ) : (
+                    <p className="text-sm text-text-primary min-h-[2rem]">
+                      {form.interests || <span className="text-text-muted">—</span>}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Tab: Resume */}
+          {activeTab === "Resume" && (
+            <Card className="p-6">
+              <h2 className="font-display text-base font-bold text-text-primary mb-5">Resume</h2>
+              {resumeMsg && (
+                <p className={`text-xs mb-4 ${resumeMsg.includes("fail") || resumeMsg.includes("Failed") ? "text-danger" : "text-success"}`}>
+                  {resumeMsg}
+                </p>
+              )}
+              {resumeUrl ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-paper border border-border rounded-xl">
+                    <FileText size={20} className="text-signal shrink-0" />
+                    <span className="text-sm text-text-primary font-medium flex-1">Resume on file</span>
+                    <a href={resumeUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-signal hover:underline">
+                      <ExternalLink size={13} /> Open
+                    </a>
+                    {isOwnProfile && (
+                      <button onClick={handleResumeDelete} className="flex items-center gap-1 text-xs text-danger hover:underline">
+                        <Trash2 size={13} /> Delete
+                      </button>
                     )}
                   </div>
-                  <div className="divide-y divide-border">
-                    {entries.map((m) => (
-                      <div key={m._id} className="py-2.5 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-text-primary">{m.assessmentId?.title || m.assessmentId?.type || "Assessment"}</p>
-                          <p className="text-xs text-text-muted">{m.assessmentId?.type}</p>
-                        </div>
-                        {m.isAbsent ? (
-                          <Badge status="absent">AB</Badge>
-                        ) : m.marksObtained == null ? (
-                          <span className="text-xs text-text-muted">—</span>
-                        ) : (
-                          <span className="font-display font-bold text-sm text-text-primary">
-                            {m.marksObtained}<span className="text-text-muted font-normal text-xs"> / {m.assessmentId?.maxMarks ?? "?"}</span>
-                          </span>
-                        )}
+
+                  {showResumePdf ? (
+                    <div className="border border-border rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-paper border-b border-border">
+                        <span className="text-xs text-text-muted">Preview</span>
+                        <button onClick={() => setShowResumePdf(false)} className="text-xs text-text-muted hover:text-text-primary">Hide</button>
                       </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
+                      <iframe src={resumeUrl} title="Resume" className="w-full h-[75vh]" />
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowResumePdf(true)} className="text-xs text-signal hover:underline">
+                      Preview in page ↓
+                    </button>
+                  )}
+
+                  {isOwnProfile && (
+                    <div className="pt-2 border-t border-border">
+                      <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeUpload} />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={resumeUploading}
+                        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-signal transition-colors disabled:opacity-60"
+                      >
+                        <Upload size={13} /> {resumeUploading ? "Uploading…" : "Replace resume"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <FileText size={36} className="text-text-muted" />
+                  <p className="text-sm text-text-muted">No resume uploaded yet.</p>
+                  {isOwnProfile && (
+                    <>
+                      <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeUpload} />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={resumeUploading}
+                        className="flex items-center gap-2 px-4 py-2 bg-signal text-white rounded-xl text-sm font-semibold hover:bg-signal/90 transition-colors disabled:opacity-60"
+                      >
+                        <Upload size={14} /> {resumeUploading ? "Uploading…" : "Upload Resume"}
+                      </button>
+                      <p className="text-xs text-text-muted">PDF, DOC, DOCX · Max 5 MB</p>
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      </div>
     </AppShell>
   );
 }
 
-function InfoChip({ icon: Icon, text }) {
+function InfoCard({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-center gap-1.5 bg-white/15 rounded-pill px-3 py-1">
-      <Icon size={11} className="opacity-70" />
-      <span className="text-xs text-white/80 truncate max-w-[160px]">{text}</span>
+    <div className="bg-card border border-border rounded-xl p-4 flex items-start gap-3 shadow-card">
+      <div className="w-7 h-7 rounded-lg bg-signal/10 flex items-center justify-center shrink-0 mt-0.5">
+        <Icon size={14} className="text-signal" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-text-muted font-medium">{label}</p>
+        <p className="text-sm font-semibold text-text-primary mt-0.5 leading-snug break-words">{value}</p>
+      </div>
     </div>
   );
 }
 
-function MiniStat({ label, value, color, icon }) {
+function Field({ label, value, editing, onChange, type = "text", isLink = false }) {
   return (
-    <Card className="p-4 text-center">
-      {icon && <div className="flex justify-center mb-1">{icon}</div>}
-      <p className={`font-display text-2xl font-bold ${color}`}>{value}</p>
-      <p className="text-xs text-text-muted mt-0.5">{label}</p>
-    </Card>
+    <div>
+      <label className="block text-xs font-semibold text-text-secondary mb-1.5">{label}</label>
+      {editing && onChange ? (
+        <input
+          type={type}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          className="input w-full"
+        />
+      ) : (
+        <p className="text-sm text-text-primary">
+          {value !== "" && value != null ? (
+            isLink ? (
+              <a href={value} target="_blank" rel="noreferrer" className="text-signal hover:underline break-all">
+                {value}
+              </a>
+            ) : (
+              String(value)
+            )
+          ) : (
+            <span className="text-text-muted">—</span>
+          )}
+        </p>
+      )}
+    </div>
   );
 }

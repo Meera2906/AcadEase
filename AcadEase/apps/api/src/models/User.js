@@ -29,6 +29,20 @@ const userSchema = new mongoose.Schema(
     attendanceOptOut: { type: Boolean, default: false }, // leaderboard opt-out
     resumePath: { type: String, default: null }, // uploaded resume file path
 
+    // Student profile extras
+    dob: { type: String, default: null },
+    linkedin: { type: String, default: null },
+    college: { type: String, default: null },
+    batch: { type: String, default: null },
+    department: { type: String, default: null },
+    tenth: { type: Number, default: null },
+    twelfth: { type: Number, default: null },
+    diploma: { type: Number, default: null },
+    ugPercentage: { type: Number, default: null },
+    backlogs: { type: Number, default: 0 },
+    currentBacklogs: { type: Number, default: 0 },
+    interests: { type: String, default: null },
+
     // Faculty-specific
     designation: { type: String },
     courseIds: [{ type: String }],

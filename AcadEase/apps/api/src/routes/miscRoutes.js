@@ -3,7 +3,7 @@ import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   listNotifications, markAllRead, markOneRead, subscribePush,
-  getMe, updateMe, uploadResume, resumeUpload,
+  getMe, updateMe, uploadResume, deleteResume, resumeUpload,
   listUsers, createUser, editUser, bulkImportUsers,
   getAdminDashboard, getStudentProfile,
   listDepartments, createDepartment, updateDepartment,
@@ -27,6 +27,7 @@ router.post("/notifications/subscribe", asyncHandler(subscribePush));
 router.get("/users/me", asyncHandler(getMe));
 router.patch("/users/me", asyncHandler(updateMe));
 router.post("/users/me/resume", resumeUpload.single("resume"), asyncHandler(uploadResume));
+router.delete("/users/me/resume", asyncHandler(deleteResume));
 
 // Admin: user management
 router.get("/admin/users", requireRole("admin", "superadmin"), asyncHandler(listUsers));

@@ -76,15 +76,25 @@ export async function getMe(req, res) {
 
 // PATCH /api/users/me
 export async function updateMe(req, res) {
-  const { phone, newPassword, name, enrollmentNumber } = req.body;
+  const { phone, newPassword, name, enrollmentNumber, dob, linkedin, tenth, twelfth, diploma, ugPercentage, backlogs, currentBacklogs, interests } = req.body;
   const user = await User.findOne({ userId: req.user.userId });
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  // Only allow students to edit name / enrollmentNumber
   if (name) user.name = name.trim();
   if (phone !== undefined) user.phone = phone.trim();
   if (enrollmentNumber !== undefined && user.role === "student") user.enrollmentNumber = enrollmentNumber.trim();
   if (newPassword) user.passwordHash = await bcrypt.hash(newPassword, 12);
+  if (user.role === "student") {
+    if (dob !== undefined) user.dob = dob;
+    if (linkedin !== undefined) user.linkedin = linkedin;
+    if (tenth !== undefined) user.tenth = tenth;
+    if (twelfth !== undefined) user.twelfth = twelfth;
+    if (diploma !== undefined) user.diploma = diploma;
+    if (ugPercentage !== undefined) user.ugPercentage = ugPercentage;
+    if (backlogs !== undefined) user.backlogs = backlogs;
+    if (currentBacklogs !== undefined) user.currentBacklogs = currentBacklogs;
+    if (interests !== undefined) user.interests = interests;
+  }
   await user.save();
 
   const updated = user.toObject();
@@ -102,6 +112,19 @@ export async function uploadResume(req, res) {
   user.resumePath = `storage/resumes/${req.file.filename}`;
   await user.save();
   res.json({ message: "Resume uploaded", resumePath: user.resumePath });
+}
+
+// DELETE /api/users/me/resume
+export async function deleteResume(req, res) {
+  const user = await User.findOne({ userId: req.user.userId });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  if (user.resumePath) {
+    const fullPath = path.join(__dirname, "../../", user.resumePath);
+    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    user.resumePath = null;
+    await user.save();
+  }
+  res.json({ message: "Resume deleted" });
 }
 
 // ---------- Admin: user management ----------

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ClipboardList } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { ClipboardList, Upload, Users, FileText, ExternalLink } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
 import Card from "../../components/ui/Card.jsx";
@@ -10,14 +10,18 @@ import Toast, { useToast } from "../../components/ui/Toast.jsx";
 const ASSESSMENT_TYPES = ["IA1", "IA2", "Assignment", "Lab Record", "Model Exam"];
 
 export default function FacultyResultEntry() {
-  const [courseId, setCourseId]       = useState("CS301");
+  const [courseId, setCourseId] = useState("CS301");
   const [assessments, setAssessments] = useState([]);
-  const [selected, setSelected]       = useState(null);
-  const [entries, setEntries]         = useState([]);
-  const [newA, setNewA]               = useState({ type: "IA1", title: "", maxMarks: "" });
-  const [showCreate, setShowCreate]   = useState(false);
-  const [submitting, setSubmitting]   = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [newA, setNewA] = useState({ type: "IA1", title: "", maxMarks: "" });
+  const [showCreate, setShowCreate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const csvRef = useRef(null);
   const { toast, showToast, clearToast } = useToast();
+
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
 
   async function loadAssessments() {
     try {
@@ -43,24 +47,72 @@ export default function FacultyResultEntry() {
     }
   }
 
-  function openMarkEntry(assessment) {
+  async function openMarkEntry(assessment) {
     setSelected(assessment);
-    setEntries([{ studentId: "", marksObtained: "", isAbsent: false }]);
+    setLoadingStudents(true);
+    try {
+      const res = await api.get(`/marks/assessment/${assessment._id}/students`);
+      setEntries(
+        res.data.rows.map((r) => ({
+          studentId: r.studentId,
+          name: r.name,
+          enrollmentNumber: r.enrollmentNumber,
+          resumePath: r.resumePath || null,
+          marksObtained: r.marksObtained === "" ? "" : String(r.marksObtained),
+          isAbsent: r.isAbsent,
+        }))
+      );
+    } catch {
+      showToast("Failed to load students.", "error");
+      setSelected(null);
+    } finally {
+      setLoadingStudents(false);
+    }
   }
-
-  function addRow() { setEntries((p) => [...p, { studentId: "", marksObtained: "", isAbsent: false }]); }
 
   function updateEntry(i, field, value) {
     setEntries((p) => p.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
+  }
+
+  // CSV format: enrollmentNumber,marks  (header row optional)
+  function handleCsvImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const lines = ev.target.result.split(/\r?\n/).filter(Boolean);
+      const updates = {};
+      for (const line of lines) {
+        const [enroll, marks] = line.split(",").map((s) => s.trim());
+        if (!enroll || enroll.toLowerCase() === "enrollmentnumber") continue;
+        updates[enroll.toLowerCase()] = marks;
+      }
+      setEntries((prev) =>
+        prev.map((row) => {
+          const key = (row.enrollmentNumber || row.studentId).toLowerCase();
+          if (key in updates) {
+            const val = updates[key];
+            const isAbsent = val?.toLowerCase() === "ab" || val?.toLowerCase() === "absent";
+            return { ...row, isAbsent, marksObtained: isAbsent ? "" : val };
+          }
+          return row;
+        })
+      );
+      showToast("CSV imported. Review before publishing.", "success");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   }
 
   async function submitMarks(e) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const payload = entries
-        .filter((e) => e.studentId.trim())
-        .map((e) => ({ studentId: e.studentId.trim(), marksObtained: e.isAbsent ? null : Number(e.marksObtained), isAbsent: e.isAbsent }));
+      const payload = entries.map((e) => ({
+        studentId: e.studentId,
+        marksObtained: e.isAbsent ? null : e.marksObtained === "" ? null : Number(e.marksObtained),
+        isAbsent: e.isAbsent,
+      }));
       await api.post(`/marks/${selected._id}`, { entries: payload });
       showToast("Marks published successfully.", "success");
       setSelected(null);
@@ -108,9 +160,9 @@ export default function FacultyResultEntry() {
                   <Badge status={a.marksPublished ? "approved" : "pending"}>
                     {a.marksPublished ? "Published" : "Pending"}
                   </Badge>
-                  {!a.marksPublished && (
-                    <Button variant="secondary" size="sm" onClick={() => openMarkEntry(a)}>Enter Marks</Button>
-                  )}
+                  <Button variant="secondary" size="sm" onClick={() => openMarkEntry(a)}>
+                    {a.marksPublished ? "View / Edit Marks" : "Enter Marks"}
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -118,6 +170,7 @@ export default function FacultyResultEntry() {
         </div>
       )}
 
+      {/* Create Assessment Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-40 p-4">
           <Card className="w-full max-w-md shadow-lift">
@@ -146,27 +199,111 @@ export default function FacultyResultEntry() {
         </div>
       )}
 
+      {/* Mark Entry Modal */}
       {selected && (
         <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-40 p-4">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lift">
-            <h2 className="font-display text-lg font-bold text-text-primary mb-1">Enter Marks</h2>
-            <p className="text-sm text-text-muted mb-4">{selected.title} · Max: {selected.maxMarks}</p>
-            <form onSubmit={submitMarks} className="space-y-3">
-              {entries.map((entry, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <input placeholder="Student ID" value={entry.studentId} onChange={(e) => updateEntry(i, "studentId", e.target.value)} className="input flex-1 font-mono" />
-                  <input type="number" placeholder="Marks" min="0" max={selected.maxMarks} disabled={entry.isAbsent} value={entry.isAbsent ? "" : entry.marksObtained} onChange={(e) => updateEntry(i, "marksObtained", e.target.value)} className="input w-24 disabled:bg-paper" />
-                  <label className="flex items-center gap-1 text-xs text-text-muted whitespace-nowrap">
-                    <input type="checkbox" checked={entry.isAbsent} onChange={(e) => updateEntry(i, "isAbsent", e.target.checked)} /> AB
-                  </label>
-                </div>
-              ))}
-              <Button type="button" variant="ghost" onClick={addRow} size="sm">+ Add student</Button>
-              <div className="flex gap-3 pt-2">
-                <Button type="submit" disabled={submitting} className="flex-1">{submitting ? "Publishing…" : "Publish Marks"}</Button>
-                <Button type="button" variant="secondary" onClick={() => setSelected(null)}>Cancel</Button>
+          <Card className="w-full max-w-3xl max-h-[92vh] flex flex-col shadow-lift">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-1 shrink-0">
+              <div>
+                <h2 className="font-display text-lg font-bold text-text-primary">Enter Marks</h2>
+                <p className="text-sm text-text-muted">{selected.title} · Max: {selected.maxMarks}</p>
               </div>
-            </form>
+              <div className="flex items-center gap-2">
+                <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => csvRef.current?.click()}
+                >
+                  <Upload size={13} className="mr-1" /> Import CSV
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-muted mb-3 shrink-0">
+              CSV format: <code className="bg-paper px-1 rounded">enrollmentNumber,marks</code> — use <code className="bg-paper px-1 rounded">AB</code> for absent.
+            </p>
+
+            {loadingStudents ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-signal/30 border-t-signal rounded-full animate-spin" />
+              </div>
+            ) : (
+              <form onSubmit={submitMarks} className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center gap-2 mb-3 shrink-0">
+                  <Users size={14} className="text-text-muted" />
+                  <span className="text-xs text-text-muted">{entries.length} students loaded</span>
+                </div>
+
+                <div className="overflow-y-auto flex-1 border border-border rounded-xl">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-paper border-b border-border">
+                      <tr>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-text-muted w-8">#</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-text-muted">Name</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-text-muted">Reg. No.</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-text-muted w-16">Doc</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-text-muted w-24">Marks</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-text-muted w-14">AB</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {entries.map((entry, i) => (
+                        <tr key={entry.studentId} className={entry.isAbsent ? "bg-danger/5" : ""}>
+                          <td className="px-3 py-2 text-xs text-text-muted tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2 font-medium text-text-primary">{entry.name}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-text-muted">{entry.enrollmentNumber}</td>
+                          <td className="px-3 py-2 text-center">
+                            {entry.resumePath ? (
+                              <a
+                                href={`${apiBase}/${entry.resumePath}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="View resume"
+                                className="inline-flex items-center justify-center text-signal hover:text-signal/80"
+                              >
+                                <FileText size={15} />
+                              </a>
+                            ) : (
+                              <span className="text-xs text-text-muted">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max={selected.maxMarks}
+                              disabled={entry.isAbsent}
+                              value={entry.isAbsent ? "" : entry.marksObtained}
+                              onChange={(e) => updateEntry(i, "marksObtained", e.target.value)}
+                              className="input w-full text-center py-1 disabled:bg-paper"
+                              placeholder="—"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={entry.isAbsent}
+                              onChange={(e) => updateEntry(i, "isAbsent", e.target.checked)}
+                              className="w-4 h-4 accent-danger"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex gap-3 pt-4 shrink-0">
+                  <Button type="submit" disabled={submitting} className="flex-1">
+                    {submitting ? "Publishing…" : "Publish Marks"}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setSelected(null)}>Cancel</Button>
+                </div>
+              </form>
+            )}
           </Card>
         </div>
       )}
