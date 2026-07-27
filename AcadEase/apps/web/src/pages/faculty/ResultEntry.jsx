@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { ClipboardList, Upload, Users, FileText, ExternalLink } from "lucide-react";
+import { ClipboardList, Upload, Users, FileText, ExternalLink, AlertTriangle, Send } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
 import Card from "../../components/ui/Card.jsx";
@@ -21,6 +21,10 @@ export default function FacultyResultEntry() {
   const csvRef = useRef(null);
   const { toast, showToast, clearToast } = useToast();
 
+  // Rejected results for this faculty
+  const [rejectedResults, setRejectedResults] = useState([]);
+  const [submittingReview, setSubmittingReview] = useState(null); // studentId being submitted
+
   const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
 
   async function loadAssessments() {
@@ -32,7 +36,28 @@ export default function FacultyResultEntry() {
     }
   }
 
+  async function loadRejected() {
+    try {
+      const res = await api.get("/results/pending-review");
+      setRejectedResults((res.data.results || []).filter((r) => r.status === "rejected"));
+    } catch { /* non-fatal */ }
+  }
+
   useEffect(() => { if (courseId) loadAssessments(); }, [courseId]);
+  useEffect(() => { loadRejected(); }, []);
+
+  async function handleSubmitForReview(studentId, semester, academicYear) {
+    setSubmittingReview(studentId);
+    try {
+      await api.post(`/results/semester/${studentId}/submit-review`, { semester, academicYear });
+      showToast("Submitted for admin review.", "success");
+      loadRejected();
+    } catch (ex) {
+      showToast(ex.response?.data?.error || "Failed to submit.", "error");
+    } finally {
+      setSubmittingReview(null);
+    }
+  }
 
   async function createAssessment(e) {
     e.preventDefault();
@@ -133,6 +158,35 @@ export default function FacultyResultEntry() {
         <h1 className="font-display text-2xl font-bold text-text-primary">Result Entry</h1>
       </div>
       <p className="text-sm text-text-secondary mb-6">Create assessments and publish marks.</p>
+
+      {/* Rejected results banner */}
+      {rejectedResults.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {rejectedResults.map((r) => (
+            <div key={`${r.studentId}-${r.semester}`} className="flex items-start gap-3 bg-danger/5 border border-danger/30 rounded-xl px-4 py-3">
+              <AlertTriangle size={16} className="text-danger shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-danger">Result Rejected — Correction Required</p>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  <span className="font-mono">{r.studentId}</span> — Sem {r.semester} ({r.academicYear})
+                </p>
+                <p className="text-xs text-text-primary mt-1 bg-danger/10 rounded-lg px-2 py-1 inline-block">
+                  Reason: {r.rejectionNote}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                disabled={submittingReview === r.studentId}
+                onClick={() => handleSubmitForReview(r.studentId, r.semester, r.academicYear)}
+                className="flex items-center gap-1 shrink-0"
+              >
+                <Send size={12} />
+                {submittingReview === r.studentId ? "Submitting…" : "Resubmit"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Card className="mb-6">
         <div className="flex items-end gap-4">

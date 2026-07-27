@@ -64,6 +64,71 @@ export async function enterSemesterResult(req, res) {
   res.status(201).json({ result });
 }
 
+// POST /api/results/semester/:studentId/submit-review  — faculty submits for admin review
+export async function submitResultForReview(req, res) {
+  const { studentId } = req.params;
+  const { semester, academicYear } = req.body;
+  if (!semester || !academicYear) return res.status(400).json({ error: "semester and academicYear required" });
+
+  const result = await Result.findOneAndUpdate(
+    { studentId, semester: Number(semester), academicYear },
+    { $set: { status: "pending_review", rejectionNote: null, rejectedBy: null } },
+    { new: true }
+  );
+  if (!result) return res.status(404).json({ error: "Result not found. Enter marks first." });
+
+  // Notify all admins in the same department
+  const faculty = await User.findOne({ userId: req.user.userId }).select("departmentId");
+  const admins = await User.find({ role: { $in: ["admin", "superadmin"] }, departmentId: faculty?.departmentId }).select("userId");
+  await Promise.all(admins.map((a) =>
+    pushNotification({
+      userId: a.userId,
+      type: "result_review",
+      priority: "high",
+      title: "Result Pending Review",
+      message: `Faculty submitted Semester ${semester} (${academicYear}) result for ${studentId} — awaiting your approval.`,
+      linkTo: "/admin/marks",
+    })
+  ));
+
+  res.json({ message: "Submitted for review.", result });
+}
+
+// POST /api/results/semester/:studentId/reject  — admin rejects and sends back to faculty
+export async function rejectResult(req, res) {
+  const { studentId } = req.params;
+  const { semester, academicYear, rejectionNote } = req.body;
+  if (!semester || !academicYear) return res.status(400).json({ error: "semester and academicYear required" });
+  if (!rejectionNote?.trim()) return res.status(400).json({ error: "rejectionNote is required" });
+
+  const result = await Result.findOneAndUpdate(
+    { studentId, semester: Number(semester), academicYear },
+    { $set: { status: "rejected", rejectionNote: rejectionNote.trim(), rejectedBy: req.user.userId } },
+    { new: true }
+  );
+  if (!result) return res.status(404).json({ error: "Result not found" });
+
+  // Notify the faculty who entered the result
+  await pushNotification({
+    userId: result.enteredBy,
+    type: "result_rejected",
+    priority: "high",
+    title: "Result Rejected — Correction Required",
+    message: `Semester ${semester} (${academicYear}) result for ${studentId} was rejected. Reason: ${rejectionNote.trim()}`,
+    linkTo: "/faculty/results",
+  });
+
+  res.json({ message: "Result rejected and faculty notified.", result });
+}
+
+// GET /api/results/pending-review  — admin: list all results pending review or rejected
+export async function listPendingResults(req, res) {
+  const results = await Result.find({ status: { $in: ["pending_review", "rejected"] } })
+    .sort({ updatedAt: -1 })
+    .select("studentId semester academicYear status rejectionNote rejectedBy enteredBy updatedAt");
+  res.json({ results });
+}
+
 // POST /api/results/semester/:studentId/publish
 export async function publishSemesterResult(req, res) {
   const { studentId } = req.params;
@@ -141,7 +206,7 @@ export async function publishSemesterResult(req, res) {
 
   const result = await Result.findOneAndUpdate(
     { studentId, semester: Number(semester), academicYear },
-    { $set: { subjects, enteredBy: req.user.userId, releasedAt: new Date() } },
+    { $set: { subjects, enteredBy: req.user.userId, releasedAt: new Date(), status: "published" } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
@@ -430,7 +495,7 @@ export async function publishAllSemesterResults(req, res) {
       // Upsert result document
       const result = await Result.findOneAndUpdate(
         { studentId: student.userId, semester: Number(semester), academicYear },
-        { $set: { subjects, enteredBy: req.user.userId, releasedAt: new Date() } },
+        { $set: { subjects, enteredBy: req.user.userId, releasedAt: new Date(), status: "published" } },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 

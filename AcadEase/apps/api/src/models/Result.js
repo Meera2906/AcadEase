@@ -18,6 +18,14 @@ const resultSchema = new mongoose.Schema(
     enteredBy: { type: String, required: true },
     releasedAt: { type: Date, default: null },
     pdfPath: { type: String, default: null },
+    status: {
+      type: String,
+      enum: ["draft", "pending_review", "rejected", "published"],
+      default: "draft",
+      index: true,
+    },
+    rejectionNote: { type: String, default: null },
+    rejectedBy: { type: String, default: null },
   },
   { timestamps: true }
 );

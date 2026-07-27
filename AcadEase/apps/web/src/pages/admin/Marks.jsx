@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ClipboardList, Search, CheckCircle, XCircle, TrendingUp, BookOpen,
-  GraduationCap, Eye, Send, AlertTriangle, Users,
+  GraduationCap, Eye, Send, AlertTriangle, Users, XOctagon,
 } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
@@ -34,7 +34,13 @@ export default function AdminMarks() {
   const [semFilter, setSemFilter]   = useState({ semester: "", academicYear: "2024-2025", departmentId: "" });
   const [previewing, setPreviewing] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [previewRows, setPreviewRows] = useState(null); // null = not loaded yet
+  const [previewRows, setPreviewRows] = useState(null);
+
+  // Pending review state
+  const [pendingResults, setPendingResults] = useState([]);
+  const [rejectTarget, setRejectTarget]     = useState(null); // { studentId, semester, academicYear }
+  const [rejectNote, setRejectNote]         = useState("");
+  const [rejecting, setRejecting]           = useState(false);
 
   async function load() {
     const [a, c, d] = await Promise.all([
@@ -47,7 +53,14 @@ export default function AdminMarks() {
     setDepts(d.data.departments || []);
   }
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  async function loadPending() {
+    try {
+      const res = await api.get("/results/pending-review");
+      setPendingResults(res.data.results || []);
+    } catch { /* non-fatal */ }
+  }
+
+  useEffect(() => { load().finally(() => setLoading(false)); loadPending(); }, []);
 
   async function togglePublish(assessmentId, current) {
     try {
@@ -94,6 +107,27 @@ export default function AdminMarks() {
       showToast(ex.response?.data?.error || "Publish failed.", "error");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleReject(e) {
+    e.preventDefault();
+    if (!rejectNote.trim()) return;
+    setRejecting(true);
+    try {
+      await api.post(`/results/semester/${rejectTarget.studentId}/reject`, {
+        semester: rejectTarget.semester,
+        academicYear: rejectTarget.academicYear,
+        rejectionNote: rejectNote.trim(),
+      });
+      showToast("Result rejected. Faculty has been notified.", "success");
+      setRejectTarget(null);
+      setRejectNote("");
+      loadPending();
+    } catch (ex) {
+      showToast(ex.response?.data?.error || "Failed to reject.", "error");
+    } finally {
+      setRejecting(false);
     }
   }
 
@@ -187,6 +221,81 @@ export default function AdminMarks() {
             </table>
           </div>
         </div>
+
+        {/* ── Pending Review Section ── */}
+        {pendingResults.length > 0 && (
+          <div className="bg-white border border-danger/30 rounded-card shadow-card p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-danger" />
+              <h2 className="font-display text-base font-semibold text-text-primary">Results Pending Review</h2>
+              <span className="ml-1 text-xs font-bold bg-danger/10 text-danger px-2 py-0.5 rounded-pill">{pendingResults.length}</span>
+            </div>
+            <div className="overflow-x-auto border border-border rounded-xl">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-paper border-b border-border">
+                    {["Student ID", "Semester", "Academic Year", "Submitted By", "Status", "Rejection Note", "Actions"].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pendingResults.map((r) => (
+                    <tr key={`${r.studentId}-${r.semester}-${r.academicYear}`} className="hover:bg-paper/40">
+                      <td className="px-4 py-3 font-mono text-xs text-text-primary">{r.studentId}</td>
+                      <td className="px-4 py-3 text-text-secondary">Sem {r.semester}</td>
+                      <td className="px-4 py-3 text-text-secondary">{r.academicYear}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-text-muted">{r.enteredBy}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-pill ${
+                          r.status === "pending_review" ? "bg-warning/10 text-warning" : "bg-danger/10 text-danger"
+                        }`}>
+                          {r.status === "pending_review" ? "Pending Review" : "Rejected"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-text-muted max-w-[200px] truncate">
+                        {r.rejectionNote || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.status === "pending_review" && (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setRejectTarget({ studentId: r.studentId, semester: r.semester, academicYear: r.academicYear });
+                                setRejectNote("");
+                              }}
+                              className="flex items-center gap-1 bg-danger hover:bg-danger/90 text-white"
+                            >
+                              <XOctagon size={12} /> Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await api.post(`/results/semester/${r.studentId}/publish`, {
+                                    semester: r.semester,
+                                    academicYear: r.academicYear,
+                                  });
+                                  showToast("Result approved and published.", "success");
+                                  loadPending();
+                                } catch (ex) {
+                                  showToast(ex.response?.data?.error || "Failed.", "error");
+                                }
+                              }}
+                            >
+                              Approve &amp; Publish
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ── Semester Result Publisher ── */}
         <div className="bg-white border border-border rounded-card shadow-card p-6 space-y-5">
@@ -367,6 +476,41 @@ export default function AdminMarks() {
         </div>
 
       </div>
+
+      {/* Reject Modal */}
+      {rejectTarget && (
+        <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-40 p-4">
+          <div className="bg-white rounded-card shadow-lift w-full max-w-md p-6">
+            <h2 className="font-display text-lg font-bold text-text-primary mb-1 flex items-center gap-2">
+              <XOctagon size={18} className="text-danger" /> Reject Result
+            </h2>
+            <p className="text-sm text-text-muted mb-4">
+              Rejecting <span className="font-mono font-semibold text-text-primary">{rejectTarget.studentId}</span> — Sem {rejectTarget.semester} ({rejectTarget.academicYear}).
+              The faculty will be notified with your reason.
+            </p>
+            <form onSubmit={handleReject} className="space-y-4">
+              <div>
+                <label className="label">Reason for Rejection</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={rejectNote}
+                  onChange={(e) => setRejectNote(e.target.value)}
+                  className="input w-full resize-none"
+                  placeholder="e.g. Marks for CS303 appear incorrect — please re-check and resubmit."
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button type="submit" disabled={rejecting || !rejectNote.trim()} className="flex-1 bg-danger hover:bg-danger/90 text-white">
+                  {rejecting ? "Rejecting…" : "Reject & Notify Faculty"}
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => { setRejectTarget(null); setRejectNote(""); }}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
+
