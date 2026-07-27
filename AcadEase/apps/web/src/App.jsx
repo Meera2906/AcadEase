@@ -7,6 +7,7 @@ import StudentCertificates from "./pages/student/Certificates.jsx";
 import StudentGrievances from "./pages/student/Grievances.jsx";
 import StudentProfile from "./pages/student/Profile.jsx";
 import StudentOdRequests from "./pages/student/OdRequests.jsx";
+import StudyMaterialsPage from "./pages/StudyMaterials.jsx";
 import FacultyAttendanceMarking from "./pages/faculty/AttendanceMarking.jsx";
 import FacultyResultEntry from "./pages/faculty/ResultEntry.jsx";
 import FacultyOdRequests from "./pages/faculty/OdRequests.jsx";
@@ -41,6 +42,8 @@ export default function App() {
       <Route path="/student/certificates" element={<ProtectedRoute roles={["student"]}><StudentCertificates /></ProtectedRoute>} />
       <Route path="/student/grievances" element={<ProtectedRoute roles={["student"]}><StudentGrievances /></ProtectedRoute>} />
       <Route path="/student/od-requests" element={<ProtectedRoute roles={["student"]}><StudentOdRequests /></ProtectedRoute>} />
+      <Route path="/student/study-materials" element={<ProtectedRoute roles={["student"]}><StudyMaterialsPage /></ProtectedRoute>} />
+      <Route path="/admin/study-materials" element={<ProtectedRoute roles={["admin", "superadmin", "faculty"]}><StudyMaterialsPage /></ProtectedRoute>} />
 
       {/* Student own profile */}
       <Route path="/student/profile" element={<ProtectedRoute roles={["student"]}><StudentProfile /></ProtectedRoute>} />

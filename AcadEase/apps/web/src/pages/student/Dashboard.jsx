@@ -260,6 +260,7 @@ export default function StudentDashboard() {
               <div className="grid grid-cols-2 gap-2.5">
                 <ActionTile icon={CalendarCheck} label="Attendance" to="/student/attendance" color="bg-signal" />
                 <ActionTile icon={ClipboardList} label="Results" to="/student/results" color="bg-teal" />
+                <ActionTile icon={BookOpen} label="Materials" to="/student/study-materials" color="bg-signal" />
                 <ActionTile icon={FileBadge} label="Certificates" to="/student/certificates" color="bg-success" />
                 <ActionTile icon={MessageSquareWarning} label="Grievances" to="/student/grievances" color="bg-coral" />
               </div>

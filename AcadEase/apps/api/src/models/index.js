@@ -13,3 +13,4 @@ export { default as Grievance } from "./Grievance.js";
 export { default as Notification } from "./Notification.js";
 export { default as XpLedger } from "./XpLedger.js";
 export { default as Announcement } from "./Announcement.js";
+export { default as StudyMaterial } from "./StudyMaterial.js";

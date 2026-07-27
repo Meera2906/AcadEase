@@ -4,12 +4,14 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   listNotifications, markAllRead, markOneRead, subscribePush,
   getMe, updateMe, uploadResume, deleteResume, resumeUpload,
+  studyMaterialUpload,
   listUsers, createUser, editUser, bulkImportUsers,
   getAdminDashboard, getStudentProfile,
   listDepartments, createDepartment, updateDepartment,
   listCourses, createCourse, updateCourse, deleteCourse,
   listAnnouncements, createAnnouncement, deleteAnnouncement,
   listStudentAnnouncements,
+  uploadStudyMaterial, listStudyMaterials, deleteStudyMaterial,
   getAttendanceReport, getMarksReport,
   getStudentXp, getLeaderboard,
 } from "../controllers/miscController.js";
@@ -57,6 +59,11 @@ router.delete("/admin/announcements/:id", requireRole("admin", "superadmin"), as
 
 // Student/Faculty: view announcements targeted to their role
 router.get("/announcements", asyncHandler(listStudentAnnouncements));
+
+// Study materials
+router.post("/study-materials", requireRole("admin", "superadmin", "faculty"), studyMaterialUpload.single("file"), asyncHandler(uploadStudyMaterial));
+router.get("/study-materials", asyncHandler(listStudyMaterials));
+router.delete("/study-materials/:id", requireRole("admin", "superadmin", "faculty"), asyncHandler(deleteStudyMaterial));
 
 // Admin: reports
 router.get("/admin/reports/attendance", requireRole("admin", "superadmin"), asyncHandler(getAttendanceReport));

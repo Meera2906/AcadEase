@@ -14,6 +14,7 @@ import {
   Course,
   XpLedger,
   Announcement,
+  StudyMaterial,
 } from "../models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,27 @@ export const resumeUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (req, file, cb) => {
     const allowed = [".pdf", ".doc", ".docx"];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
+});
+
+const studyMaterialsDir = path.join(__dirname, "../../storage/study-materials");
+if (!fs.existsSync(studyMaterialsDir)) fs.mkdirSync(studyMaterialsDir, { recursive: true });
+
+const studyMaterialStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, studyMaterialsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
+    cb(null, safeName);
+  },
+});
+
+export const studyMaterialUpload = multer({
+  storage: studyMaterialStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg", ".png"];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
   },
 });
@@ -126,6 +148,54 @@ export async function deleteResume(req, res) {
     await user.save();
   }
   res.json({ message: "Resume deleted" });
+}
+
+// ---------- Study materials ----------
+
+export async function uploadStudyMaterial(req, res) {
+  const { title, description = "", category = "general", audience = "all" } = req.body;
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  if (!title) return res.status(400).json({ error: "title is required" });
+
+  const material = await StudyMaterial.create({
+    title: title.trim(),
+    description: description.trim(),
+    category: ["general", "tet"].includes(category) ? category : "general",
+    audience: ["all", "students", "faculty"].includes(audience) ? audience : "all",
+    fileName: req.file.originalname,
+    filePath: `storage/study-materials/${req.file.filename}`,
+    mimeType: req.file.mimetype || "application/octet-stream",
+    fileSize: req.file.size || 0,
+    uploadedBy: req.user.userId,
+    institutionId: req.user.institutionId,
+    departmentId: req.user.departmentId || null,
+  });
+
+  res.status(201).json({ material });
+}
+
+export async function listStudyMaterials(req, res) {
+  const role = req.user.role;
+  const filter = { institutionId: req.user.institutionId, isActive: true };
+
+  if (role === "student") {
+    filter.$or = [{ audience: "all" }, { audience: "students" }];
+  }
+
+  const materials = await StudyMaterial.find(filter).sort({ category: 1, createdAt: -1 });
+  res.json({ materials });
+}
+
+export async function deleteStudyMaterial(req, res) {
+  const material = await StudyMaterial.findById(req.params.id);
+  if (!material) return res.status(404).json({ error: "Study material not found" });
+
+  const fullPath = path.join(__dirname, "../../", material.filePath);
+  if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+
+  material.isActive = false;
+  await material.save();
+  res.json({ message: "Study material removed" });
 }
 
 // ---------- Admin: user management ----------
