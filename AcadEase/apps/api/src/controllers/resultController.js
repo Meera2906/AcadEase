@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import multer from "multer";
+import twilio from "twilio";
 import { Result, Marks, Assessment, Course, User, Enrollment } from "../models/index.js";
 import { generateResultPdf } from "../utils/resultPdf.js";
 import { sendEmail, pushNotification } from "../utils/notify.js";
@@ -17,14 +18,33 @@ export const resultPdfUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// Normalise a phone number to E.164 — assumes Indian numbers if no country code
+function toE164(phone) {
+  const digits = phone.replace(/\D/g, "");
+  if (phone.startsWith("+")) return `+${digits}`;
+  // Indian 10-digit mobile
+  if (digits.length === 10) return `+91${digits}`;
+  // Already has country code without +
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+  return `+${digits}`;
+}
+
 async function sendSms(to, body) {
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_FROM) return;
+  const sid   = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from  = process.env.TWILIO_FROM;
+  if (!sid || !token || !from) {
+    console.warn("[sms] Twilio env vars not set — skipping SMS");
+    return;
+  }
+  const toFormatted = toE164(to);
+  console.log(`[sms] sending to ${toFormatted} from ${from}`);
   try {
-    const { default: twilio } = await import("twilio");
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    await client.messages.create({ from: process.env.TWILIO_FROM, to, body });
+    const client = twilio(sid, token);
+    const msg = await client.messages.create({ from, to: toFormatted, body });
+    console.log(`[sms] sent — SID: ${msg.sid}`);
   } catch (err) {
-    console.error("[sms] failed:", err.message);
+    console.error("[sms] failed:", err.message, err.code || "");
   }
 }
 

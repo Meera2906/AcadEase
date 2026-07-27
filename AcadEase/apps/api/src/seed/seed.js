@@ -79,6 +79,9 @@ async function seedUsers() {
     "Vishal Anand", "Swathi Narayan", "Mayurika Sivakumar", "Monisha Ganesh", "Rahul Prakash",
   ];
 
+  // Demo parent phone — all point to the verified Twilio test number
+  const DEMO_PARENT_PHONE = "+917598340237";
+
   const students = studentNames.map((name, i) => {
     const num = String(i + 1).padStart(3, "0");
     const dept = i < 12 ? "CSE_2024" : "ECE_2024";
@@ -92,6 +95,7 @@ async function seedUsers() {
       section: "A",
       batchYear: 2021,
       enrollmentNumber: `TNTEU21${dept.startsWith("CSE") ? "CS" : "EC"}${num}`,
+      parentPhone: DEMO_PARENT_PHONE,
     };
   });
 
