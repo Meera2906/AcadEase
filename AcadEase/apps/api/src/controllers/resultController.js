@@ -215,11 +215,15 @@ export async function publishSemesterResult(req, res) {
   );
   if (!student) return res.status(404).json({ error: "Student not found" });
 
-  const { storagePath } = await generateResultPdf({ student, result });
-  await Result.findByIdAndUpdate(result._id, { pdfPath: storagePath });
-
   const apiBase = process.env.API_URL || "http://localhost:5000";
-  const pdfUrl = `${apiBase}/${storagePath}`;
+  let pdfUrl = null;
+  try {
+    const { storagePath } = await generateResultPdf({ student, result });
+    await Result.findByIdAndUpdate(result._id, { pdfPath: storagePath });
+    pdfUrl = `${apiBase}/${storagePath}`;
+  } catch (pdfErr) {
+    console.warn("[publish] PDF generation skipped:", pdfErr.message);
+  }
 
   await pushNotification({
     userId: studentId,
@@ -234,18 +238,18 @@ export async function publishSemesterResult(req, res) {
     await sendEmail({
       to: student.email,
       subject: `Semester ${semester} Result — ${academicYear}`,
-      html: `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#1a1a2e">Semester Result Published</h2><p>Hi <strong>${student.name}</strong>,</p><p>Your <strong>Semester ${semester} (${academicYear})</strong> result has been published.</p><a href="${pdfUrl}" style="display:inline-block;margin-top:8px;padding:10px 20px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Download Result PDF</a><p style="font-size:12px;color:#9ca3af;margin-top:24px">This is an automated message from AcadEase.</p></div>`,
+      html: `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#1a1a2e">Semester Result Published</h2><p>Hi <strong>${student.name}</strong>,</p><p>Your <strong>Semester ${semester} (${academicYear})</strong> result has been published.</p>${pdfUrl ? `<a href="${pdfUrl}" style="display:inline-block;margin-top:8px;padding:10px 20px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Download Result PDF</a>` : ""}<p style="font-size:12px;color:#9ca3af;margin-top:24px">This is an automated message from AcadEase.</p></div>`,
     });
   }
 
-  if (student.parentPhone) {
+  if (student.parentPhone && pdfUrl) {
     await sendSms(
       student.parentPhone,
       `AcadEase: ${student.name}'s Semester ${semester} (${academicYear}) result is published. Download: ${pdfUrl}`
     );
   }
 
-  res.json({ message: "Result published and notifications sent.", pdfPath: storagePath });
+  res.json({ message: "Result published and notifications sent.", pdfPath: result.pdfPath ?? null });
 }
 
 // POST /api/results/semester/:studentId/upload-pdf
@@ -499,11 +503,15 @@ export async function publishAllSemesterResults(req, res) {
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      // Generate PDF
-      const { storagePath } = await generateResultPdf({ student, result });
-      await Result.findByIdAndUpdate(result._id, { pdfPath: storagePath });
-
-      const pdfUrl = `${apiBase}/${storagePath}`;
+      // Generate PDF (non-fatal — Render has a read-only filesystem)
+      let pdfUrl = null;
+      try {
+        const { storagePath } = await generateResultPdf({ student, result });
+        await Result.findByIdAndUpdate(result._id, { pdfPath: storagePath });
+        pdfUrl = `${apiBase}/${storagePath}`;
+      } catch (pdfErr) {
+        console.warn(`[publish-all] PDF skipped for ${student.userId}:`, pdfErr.message);
+      }
 
       // In-app notification
       await pushNotification({
@@ -520,19 +528,19 @@ export async function publishAllSemesterResults(req, res) {
         await sendEmail({
           to: student.email,
           subject: `Semester ${semester} Result — ${academicYear}`,
-          html: `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#1a1a2e">Semester Result Published</h2><p>Hi <strong>${student.name}</strong>,</p><p>Your <strong>Semester ${semester} (${academicYear})</strong> result has been published.</p><a href="${pdfUrl}" style="display:inline-block;margin-top:8px;padding:10px 20px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Download Result PDF</a><p style="font-size:12px;color:#9ca3af;margin-top:24px">This is an automated message from AcadEase.</p></div>`,
+          html: `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#1a1a2e">Semester Result Published</h2><p>Hi <strong>${student.name}</strong>,</p><p>Your <strong>Semester ${semester} (${academicYear})</strong> result has been published.</p>${pdfUrl ? `<a href="${pdfUrl}" style="display:inline-block;margin-top:8px;padding:10px 20px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Download Result PDF</a>` : ""}<p style="font-size:12px;color:#9ca3af;margin-top:24px">This is an automated message from AcadEase.</p></div>`,
         });
       }
 
       // SMS to parent
-      if (student.parentPhone) {
+      if (student.parentPhone && pdfUrl) {
         await sendSms(
           student.parentPhone,
           `AcadEase: ${student.name}'s Semester ${semester} (${academicYear}) result is published. Download: ${pdfUrl}`
         );
       }
 
-      published.push({ studentId: student.userId, name: student.name, pdfPath: storagePath });
+      published.push({ studentId: student.userId, name: student.name, pdfPath: pdfUrl ?? null });
     } catch (err) {
       console.error(`[publish-all] failed for ${student.userId}:`, err.message);
       failed.push({ studentId: student.userId, name: student.name, reason: err.message });
