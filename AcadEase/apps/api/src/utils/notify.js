@@ -1,13 +1,25 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { Notification, User } from "../models/index.js";
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// ── Email transport (Nodemailer) ──────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  connectionTimeout: 5000,
+  greetingTimeout: 5000,
+  socketTimeout: 5000,
+});
 
 export async function sendEmail({ to, subject, html }) {
-  if (!resend) { console.warn("[email] RESEND_API_KEY not set — skipping"); return; }
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return; // skip if not configured
   try {
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM || "AcadEase <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"AcadEase" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,

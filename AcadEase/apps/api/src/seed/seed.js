@@ -81,8 +81,6 @@ async function seedUsers() {
 
   // Demo parent phone — all point to the verified Twilio test number
   const DEMO_PARENT_PHONE = "+917598340237";
-  // Demo email — all point to a real inbox so Resend can deliver on free tier
-  const DEMO_EMAIL = process.env.DEMO_EMAIL || "ajmalfareena2006@gmail.com";
 
   const students = studentNames.map((name, i) => {
     const num = String(i + 1).padStart(3, "0");
@@ -90,7 +88,7 @@ async function seedUsers() {
     return {
       userId: `STU_2021_${dept.startsWith("CSE") ? "CS" : "EC"}_${num}`,
       name,
-      email: DEMO_EMAIL,
+      email: `${name.toLowerCase().replace(/\s+/g, ".")}@tnteu.ac.in`,
       departmentId: dept,
       role: "student",
       semester: SEMESTER,
