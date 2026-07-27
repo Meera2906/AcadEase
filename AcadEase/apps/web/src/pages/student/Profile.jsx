@@ -66,6 +66,7 @@ export default function StudentProfile() {
           enrollmentNumber: s?.enrollmentNumber || "",
           dob: s?.dob || "",
           phone: s?.phone || "",
+          parentPhone: s?.parentPhone || "",
           linkedin: s?.linkedin || "",
           tenth: s?.tenth ?? "",
           twelfth: s?.twelfth ?? "",
@@ -86,6 +87,7 @@ export default function StudentProfile() {
     try {
       const payload = {
         phone: form.phone,
+        parentPhone: form.parentPhone,
         dob: form.dob,
         linkedin: form.linkedin,
         tenth: form.tenth === "" ? null : Number(form.tenth),
@@ -165,7 +167,7 @@ export default function StudentProfile() {
   const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
   const resumeUrl = resumePath ? `${apiBase}/${resumePath}` : null;
 
-  const college = student.college || "Sri Krishna College of Engineering and Technology";
+  const college = student.college || "Tamil Nadu Teachers Education University";
   const batch = student.batch || (student.batchYear ? `${student.batchYear}-${student.batchYear + 4}` : "2024-2028");
   const department = student.department || student.departmentId || "BTech Artificial Intelligence and Data Science";
   const section = student.section || "E";
@@ -290,6 +292,12 @@ export default function StudentProfile() {
                   value={form.phone}
                   editing={editing}
                   onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
+                />
+                <Field
+                  label="Parent's Phone (for SMS alerts)"
+                  value={form.parentPhone}
+                  editing={editing}
+                  onChange={(v) => setForm((p) => ({ ...p, parentPhone: v }))}
                 />
                 <Field
                   label="LinkedIn"

@@ -76,7 +76,7 @@ export async function getMe(req, res) {
 
 // PATCH /api/users/me
 export async function updateMe(req, res) {
-  const { phone, newPassword, name, enrollmentNumber, dob, linkedin, tenth, twelfth, diploma, ugPercentage, backlogs, currentBacklogs, interests } = req.body;
+  const { phone, newPassword, name, enrollmentNumber, dob, linkedin, tenth, twelfth, diploma, ugPercentage, backlogs, currentBacklogs, interests, parentPhone } = req.body;
   const user = await User.findOne({ userId: req.user.userId });
   if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -94,6 +94,7 @@ export async function updateMe(req, res) {
     if (backlogs !== undefined) user.backlogs = backlogs;
     if (currentBacklogs !== undefined) user.currentBacklogs = currentBacklogs;
     if (interests !== undefined) user.interests = interests;
+    if (parentPhone !== undefined) user.parentPhone = parentPhone;
   }
   await user.save();
 

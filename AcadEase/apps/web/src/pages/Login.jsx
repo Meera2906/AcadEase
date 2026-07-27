@@ -123,6 +123,18 @@ export default function Login() {
     }
   }
 
+  async function handleReSetup(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const setup = await initTotpSetup(userId, password);
+      setSetupData(setup);
+      setStage("setup");
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to initialize 2FA setup");
+    }
+  }
+
   const stageIndex = stage === "password" ? 0 : stage === "setup" ? 1 : 2;
 
   return (
@@ -361,13 +373,24 @@ export default function Login() {
                 {loading ? "Verifying…" : "Verify & sign in"}
               </Button>
 
-              <button
-                type="button"
-                onClick={() => { setStage("password"); setTotpToken(""); setError(""); }}
-                className="w-full text-sm text-text-muted hover:text-text-secondary text-center flex items-center justify-center gap-1"
-              >
-                <ArrowLeft size={13} /> Back to login
-              </button>
+              <div className="flex flex-col gap-2.5 pt-2.5">
+                <button
+                  type="button"
+                  onClick={handleReSetup}
+                  disabled={loading}
+                  className="w-full text-xs text-signal hover:text-signal-dark font-semibold text-center transition-colors"
+                >
+                  Lost device? Re-setup Authenticator app
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setStage("password"); setTotpToken(""); setError(""); }}
+                  className="w-full text-sm text-text-muted hover:text-text-secondary text-center flex items-center justify-center gap-1"
+                >
+                  <ArrowLeft size={13} /> Back to login
+                </button>
+              </div>
             </form>
           )}
         </div>

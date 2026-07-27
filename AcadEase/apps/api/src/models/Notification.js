@@ -9,6 +9,7 @@ const notificationSchema = new mongoose.Schema(
         "absent_alert",
         "od_status",
         "marks_published",
+        "result_published",
         "certificate_ready",
         "grievance_update",
         "attendance_warning",

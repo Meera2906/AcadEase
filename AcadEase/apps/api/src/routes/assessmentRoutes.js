@@ -15,7 +15,7 @@ import {
   getCourseMarksSummary,
   getAssessmentStudents,
 } from "../controllers/assessmentController.js";
-import { enterSemesterResult, getStudentResults, getStudentSessions } from "../controllers/resultController.js";
+import { enterSemesterResult, getStudentResults, getStudentSessions, publishSemesterResult, uploadResultPdf, resultPdfUpload, previewSemesterResults, publishAllSemesterResults } from "../controllers/resultController.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -35,6 +35,10 @@ router.get("/marks/assessment/:assessmentId/leaderboard", asyncHandler(getLeader
 router.get("/marks/course/:courseId/summary", requireRole("faculty", "admin"), asyncHandler(getCourseMarksSummary));
 
 router.post("/results/semester", requireRole("admin", "superadmin"), asyncHandler(enterSemesterResult));
+router.get("/results/semester/preview", requireRole("admin", "superadmin"), asyncHandler(previewSemesterResults));
+router.post("/results/semester/publish-all", requireRole("admin", "superadmin"), asyncHandler(publishAllSemesterResults));
+router.post("/results/semester/:studentId/publish", requireRole("admin", "superadmin", "faculty"), asyncHandler(publishSemesterResult));
+router.post("/results/semester/:studentId/upload-pdf", requireRole("admin", "superadmin", "faculty"), resultPdfUpload.single("pdf"), asyncHandler(uploadResultPdf));
 router.get("/results/student/:studentId/sessions", asyncHandler(getStudentSessions));
 router.get("/results/student/:studentId", asyncHandler(getStudentResults));
 

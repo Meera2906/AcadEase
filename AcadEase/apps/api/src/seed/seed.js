@@ -22,7 +22,7 @@ import {
 } from "../models/index.js";
 import { generateCertId, signCertificate } from "../utils/certificate.js";
 
-const INSTITUTION_ID = process.env.INSTITUTION_ID || "SKCET_001";
+const INSTITUTION_ID = process.env.INSTITUTION_ID || "TNTEU_001";
 const ACADEMIC_YEAR = "2024-2025";
 const SEMESTER = 5;
 
@@ -63,14 +63,14 @@ async function seedUsers() {
   const passwordHash = await bcrypt.hash("Passw0rd!", 12);
 
   const faculty = [
-    { userId: "FAC_CSE_001", name: "Prof. Suresh Kumar", email: "suresh.kumar@skcet.ac.in", departmentId: "CSE_2024", designation: "Assistant Professor", courseIds: ["CS301", "CS302"] },
-    { userId: "FAC_CSE_002", name: "Dr. Lakshmi Narayanan", email: "lakshmi.n@skcet.ac.in", departmentId: "CSE_2024", designation: "Associate Professor", courseIds: ["CS303", "CS304"] },
-    { userId: "FAC_ECE_001", name: "Prof. Anitha Raman", email: "anitha.raman@skcet.ac.in", departmentId: "ECE_2024", designation: "Assistant Professor", courseIds: ["CS305"] },
+    { userId: "FAC_CSE_001", name: "Prof. Suresh Kumar", email: "suresh.kumar@tnteu.ac.in", departmentId: "CSE_2024", designation: "Assistant Professor", courseIds: ["CS301", "CS302"] },
+    { userId: "FAC_CSE_002", name: "Dr. Lakshmi Narayanan", email: "lakshmi.n@tnteu.ac.in", departmentId: "CSE_2024", designation: "Associate Professor", courseIds: ["CS303", "CS304"] },
+    { userId: "FAC_ECE_001", name: "Prof. Anitha Raman", email: "anitha.raman@tnteu.ac.in", departmentId: "ECE_2024", designation: "Assistant Professor", courseIds: ["CS305"] },
   ];
 
   const admin = [
-    { userId: "ADM_CSE_001", name: "Mrs. Kavitha Selvam", email: "kavitha.selvam@skcet.ac.in", departmentId: "CSE_2024", role: "admin", designation: "Department Office" },
-    { userId: "SUP_001", name: "Dr. R. Venkataraman", email: "principal@skcet.ac.in", departmentId: "CSE_2024", role: "superadmin", designation: "Principal" },
+    { userId: "ADM_CSE_001", name: "Mrs. Kavitha Selvam", email: "kavitha.selvam@tnteu.ac.in", departmentId: "CSE_2024", role: "admin", designation: "Department Office" },
+    { userId: "SUP_001", name: "Dr. R. Venkataraman", email: "registrar@tnteu.ac.in", departmentId: "CSE_2024", role: "superadmin", designation: "Registrar" },
   ];
 
   const studentNames = [
@@ -85,13 +85,13 @@ async function seedUsers() {
     return {
       userId: `STU_2021_${dept.startsWith("CSE") ? "CS" : "EC"}_${num}`,
       name,
-      email: `${name.toLowerCase().replace(/\s+/g, ".")}@skcet.ac.in`,
+      email: `${name.toLowerCase().replace(/\s+/g, ".")}@tnteu.ac.in`,
       departmentId: dept,
       role: "student",
       semester: SEMESTER,
       section: "A",
       batchYear: 2021,
-      enrollmentNumber: `SKCET21${dept.startsWith("CSE") ? "CS" : "EC"}${num}`,
+      enrollmentNumber: `TNTEU21${dept.startsWith("CSE") ? "CS" : "EC"}${num}`,
     };
   });
 

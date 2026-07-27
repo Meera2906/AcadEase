@@ -89,4 +89,4 @@ Open `http://localhost:5173`, log in with a seeded student ID
 
 ## Team
 
-SafeCircle — Meera, Niranjana, Mayurika, Monisha · SKCET, Coimbatore
+SafeCircle — Meera, Niranjana, Mayurika, Monisha · TNTEU, Chennai

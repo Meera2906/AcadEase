@@ -15,8 +15,9 @@ const resultSchema = new mongoose.Schema(
         result: { type: String, enum: ["pass", "fail", "pending"], default: "pending" },
       },
     ],
-    enteredBy: { type: String, required: true }, // adminId
-    releasedAt: { type: Date, default: null }, // null until admin releases to students
+    enteredBy: { type: String, required: true },
+    releasedAt: { type: Date, default: null },
+    pdfPath: { type: String, default: null },
   },
   { timestamps: true }
 );

@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema(
     resumePath: { type: String, default: null }, // uploaded resume file path
 
     // Student profile extras
+    parentPhone: { type: String, default: null },
     dob: { type: String, default: null },
     linkedin: { type: String, default: null },
     college: { type: String, default: null },

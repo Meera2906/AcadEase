@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { ChevronDown, BookOpen, GraduationCap, TrendingUp, CheckCircle, XCircle, Clock } from "lucide-react";
+import { ChevronDown, BookOpen, GraduationCap, TrendingUp, CheckCircle, XCircle, Clock, Download } from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import AppShell from "../../components/layout/AppShell.jsx";
@@ -253,6 +253,8 @@ function SemesterView({ result }) {
     return <p className="text-text-muted text-sm text-center py-12">No semester results available for this session.</p>;
   }
 
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
+
   const subjects = result.subjects || [];
   const passed = subjects.filter((s) => s.result === "pass").length;
   const failed = subjects.filter((s) => s.result === "fail").length;
@@ -268,6 +270,19 @@ function SemesterView({ result }) {
 
   return (
     <div className="space-y-4">
+      {/* Download PDF */}
+      {result.pdfPath && (
+        <div className="flex justify-end">
+          <a
+            href={`${apiBase}/${result.pdfPath}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-signal text-white rounded-xl text-sm font-semibold hover:bg-signal/90 transition-colors"
+          >
+            <Download size={14} /> Download Result PDF
+          </a>
+        </div>
+      )}
       {/* Summary banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-border rounded-card p-4 shadow-card text-center">
