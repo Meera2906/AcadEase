@@ -246,15 +246,18 @@ export default function StudyMaterialsPage() {
                     <input value={form.subject} onChange={(e) => setForm((p) => ({ ...p, subject: e.target.value }))} className="input" />
                   </div>
                   <div>
-                    <label className="label">Content type</label>
+                    <label className="label">Material type</label>
                     <select value={form.contentType} onChange={(e) => setForm((p) => ({ ...p, contentType: e.target.value }))} className="input">
                       <option value="text">Text material</option>
+                      <option value="syllabus">Syllabus</option>
+                      <option value="guide">Guide</option>
                       <option value="video">Video module</option>
                       <option value="textbook">Textbook reference</option>
                       <option value="quiz">Quiz</option>
                       <option value="paper">Previous year paper</option>
                       <option value="note">Note</option>
                     </select>
+                    <p className="mt-1 text-xs text-text-muted">Choose Syllabus or Guide to keep the file in the quick links area.</p>
                   </div>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
@@ -281,7 +284,7 @@ export default function StudyMaterialsPage() {
                     <input value={form.videoUrl} onChange={(e) => setForm((p) => ({ ...p, videoUrl: e.target.value }))} className="input" placeholder="https://www.youtube.com/watch?v=..." />
                   </div>
                 )}
-                {(form.contentType === "text" || form.contentType === "note") && (
+                {(form.contentType === "text" || form.contentType === "syllabus" || form.contentType === "guide" || form.contentType === "note") && (
                   <div>
                     <label className="label">Text content</label>
                     <textarea value={form.textContent} onChange={(e) => setForm((p) => ({ ...p, textContent: e.target.value }))} rows={5} className="input" />
@@ -294,7 +297,7 @@ export default function StudyMaterialsPage() {
                   </div>
                 )}
                 <div>
-                  <label className="label">Upload file (optional)</label>
+                  <label className="label">{form.contentType === "syllabus" || form.contentType === "guide" ? "Upload syllabus or guide file" : "Upload file (optional)"}</label>
                   <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block w-full text-sm text-text-secondary" />
                 </div>
                 <div className="flex gap-3 pt-2">

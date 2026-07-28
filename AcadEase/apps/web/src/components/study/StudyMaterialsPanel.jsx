@@ -99,6 +99,8 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
     return Boolean(filePath) && /\.pdf$/i.test(filePath) || item?.mimeType?.includes("pdf") || item?.mimeType?.includes("image");
   };
 
+  const textLikeTypes = ["text", "syllabus", "guide", "note"];
+
   if (loading) return <div className="text-sm text-text-muted">Loading materials…</div>;
 
   return (
@@ -188,14 +190,14 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
               </div>
             ))}
 
-            {group.items.filter((m) => m.contentType === "text").map((item) => (
+            {group.items.filter((m) => textLikeTypes.includes(m.contentType)).map((item) => (
               <div key={item._id} className="rounded-xl border border-border p-3 bg-paper/70">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-text-primary">{item.title}</p>
-                    <p className="text-xs text-text-muted">Text material</p>
+                    <p className="text-xs text-text-muted">{item.contentType === "syllabus" ? "Syllabus" : item.contentType === "guide" ? "Guide" : item.contentType === "note" ? "Note" : "Text material"}</p>
                   </div>
-                  <span className="rounded-full bg-citrus/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-citrus">Text</span>
+                  <span className="rounded-full bg-citrus/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-citrus">{item.contentType === "syllabus" ? "Syllabus" : item.contentType === "guide" ? "Guide" : "Text"}</span>
                 </div>
                 {item.description ? <p className="mt-3 text-sm text-text-secondary">{item.description}</p> : <p className="mt-3 text-sm text-text-muted">Prepared learning material is available for this module.</p>}
                 {item.filePath ? (

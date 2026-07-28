@@ -4,7 +4,7 @@ import {
   LayoutDashboard, CalendarCheck, ClipboardList,
   FileBadge, MessageSquareWarning, Bell, LogOut,
   GraduationCap, Menu, X, User, Users, Building2,
-  BookOpen, Megaphone, BarChart2,
+  BookOpen, Megaphone, BarChart2, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api from "../../api/client.js";
@@ -67,6 +67,7 @@ export default function AppShell({ children }) {
   const [bellOpen, setBellOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const studyMaterialsRoute = user?.role === "student" ? "/student/study-materials" : "/admin/study-materials";
   const profileRoute = user?.role === "student" ? "/student/profile" : user?.role === "faculty" ? "/faculty/profile" : "/admin/profile";
@@ -76,6 +77,7 @@ export default function AppShell({ children }) {
   const bellRef = useRef(null);
   const mobileRef = useRef(null);
   const materialsRef = useRef(null);
+  const moreRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -91,6 +93,7 @@ export default function AppShell({ children }) {
       if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false);
       if (mobileRef.current && !mobileRef.current.contains(e.target)) setMobileOpen(false);
       if (materialsRef.current && !materialsRef.current.contains(e.target)) setMaterialsOpen(false);
+      if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false);
     }
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
@@ -152,7 +155,7 @@ export default function AppShell({ children }) {
                         setMaterialsOpen((prev) => !prev);
                         navigate(studyMaterialsRoute);
                       }}
-                      className="relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors text-white/55 hover:bg-ink-light hover:text-white/90"
+                      className="relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors text-white/80"
                     >
                       <Icon size={15} />
                       {label}
@@ -188,7 +191,7 @@ export default function AppShell({ children }) {
                     `relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-ink-light text-white"
-                        : "text-white/55 hover:bg-ink-light hover:text-white/90"
+                        : "text-white/80"
                     }`
                   }
                 >
@@ -204,27 +207,42 @@ export default function AppShell({ children }) {
                 </NavLink>
               );
             })}
-            {compactNav && navExpanded && secondaryItems.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-ink-light text-white"
-                      : "text-white/55 hover:bg-ink-light hover:text-white/90"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-pill bg-citrus" />}
-                    <Icon size={15} />
-                    {label}
-                  </>
+            {compactNav && secondaryItems.length > 0 && (
+              <div className="relative" ref={moreRef}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMoreOpen((prev) => !prev);
+                  }}
+                  className="flex items-center gap-2 rounded-card px-3 py-2 text-sm font-medium text-white/80 transition-colors"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <BookOpen size={15} /> More
+                  </span>
+                  <ChevronDown size={14} className={`transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {moreOpen && (
+                  <div className="absolute left-0 top-11 w-56 rounded-card border border-border bg-card shadow-lift overflow-hidden z-50">
+                    {secondaryItems.map(({ to, label, icon: Icon }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        onClick={() => setMoreOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
+                            isActive ? "bg-paper text-text-primary" : "text-text-secondary"
+                          }`
+                        }
+                      >
+                        <Icon size={15} />
+                        {label}
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
-              </NavLink>
-            ))}
+              </div>
+            )}
           </nav>
 
           {/* Right side */}

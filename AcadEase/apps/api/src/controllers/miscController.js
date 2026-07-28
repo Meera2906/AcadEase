@@ -418,7 +418,7 @@ export async function uploadStudyMaterial(req, res) {
     description: description.trim(),
     moduleType: ["academic", "tet"].includes(moduleType) ? moduleType : "academic",
     subject: subject.trim() || "General",
-    contentType: ["video", "text", "textbook", "quiz", "paper", "note"].includes(contentType) ? contentType : "text",
+    contentType: ["video", "text", "textbook", "quiz", "paper", "note", "syllabus", "guide"].includes(contentType) ? contentType : "text",
     audience: ["all", "students", "faculty"].includes(audience) ? audience : "all",
     fileName,
     filePath,
