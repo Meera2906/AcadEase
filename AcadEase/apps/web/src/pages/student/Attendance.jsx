@@ -17,7 +17,6 @@ export default function StudentAttendance() {
   const [summary, setSummary] = useState(null);
   const [records, setRecords] = useState({});   // byCourse raw records
   const [odRequests, setOdRequests] = useState([]);
-  const [tab, setTab] = useState("subjects");
   const [loading, setLoading] = useState(true);
   const [expandedCourse, setExpandedCourse] = useState(null);
   // dispute form state: keyed by attendanceRecordId
@@ -155,27 +154,7 @@ export default function StudentAttendance() {
             </div>
           )}
 
-          {/* Tabs */}
-          <div className="flex gap-1 mb-6 bg-white border border-border p-1 rounded-pill w-fit">
-            {[
-              { key: "subjects", label: "Subjects" },
-              { key: "od", label: `OD Requests (${odRequests.length})` },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`px-4 py-1.5 rounded-pill text-sm font-medium transition-all ${
-                  tab === key ? "bg-ink text-white shadow-card" : "text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Subjects tab */}
-          {tab === "subjects" && (
-            <div className="space-y-4">
+          <div className="space-y-4">
               {summary?.subjects?.map((s) => {
                 const absents = getDisputeableAbsents(s.courseId);
                 const isExpanded = expandedCourse === s.courseId;
@@ -315,19 +294,7 @@ export default function StudentAttendance() {
                 );
               })}
             </div>
-          )}
 
-          {/* OD Requests tab */}
-          {tab === "od" && (
-            <div className="space-y-3">
-              {odRequests.length === 0 && (
-                <p className="text-text-muted text-sm py-8 text-center">No OD requests submitted yet.</p>
-              )}
-              {odRequests.map((r) => (
-                <OdCard key={r._id} r={r} apiBase={apiBase} />
-              ))}
-            </div>
-          )}
         </>
       )}
 

@@ -8,6 +8,7 @@ import StudentGrievances from "./pages/student/Grievances.jsx";
 import StudentProfile from "./pages/student/Profile.jsx";
 import StudentOdRequests from "./pages/student/OdRequests.jsx";
 import StudyMaterialsPage from "./pages/StudyMaterials.jsx";
+import FacultyDashboard from "./pages/faculty/Dashboard.jsx";
 import FacultyAttendanceMarking from "./pages/faculty/AttendanceMarking.jsx";
 import FacultyResultEntry from "./pages/faculty/ResultEntry.jsx";
 import FacultyOdRequests from "./pages/faculty/OdRequests.jsx";
@@ -59,6 +60,7 @@ export default function App() {
       />
 
       {/* Faculty */}
+      <Route path="/faculty/dashboard" element={<ProtectedRoute roles={["faculty"]}><FacultyDashboard /></ProtectedRoute>} />
       <Route path="/faculty/attendance" element={<ProtectedRoute roles={["faculty"]}><FacultyAttendanceMarking /></ProtectedRoute>} />
       <Route path="/faculty/results" element={<ProtectedRoute roles={["faculty"]}><FacultyResultEntry /></ProtectedRoute>} />
       <Route path="/faculty/od-requests" element={<ProtectedRoute roles={["faculty"]}><FacultyOdRequests /></ProtectedRoute>} />

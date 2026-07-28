@@ -187,6 +187,58 @@ function generateQuizFromText(text) {
   return questions;
 }
 
+function extractQuestionsFromPdfText(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const questions = [];
+  const grouped = [];
+  let current = null;
+
+  lines.forEach((line) => {
+    const questionMatch = line.match(/^(\d{1,2}|[A-Z])[.)\-\s]+(.+)$/);
+    if (questionMatch) {
+      if (current) grouped.push(current);
+      current = { question: questionMatch[2], options: [], correctAnswer: "" };
+      return;
+    }
+
+    if (current) {
+      const optionMatch = line.match(/^([A-Da-d])[.)\-\s]+(.+)$/);
+      if (optionMatch) {
+        current.options.push({ label: optionMatch[1].toUpperCase(), text: optionMatch[2] });
+        return;
+      }
+
+      if (/answer|ans|correct/i.test(line)) {
+        const answerMatch = line.match(/([A-Da-d])/);
+        if (answerMatch) current.correctAnswer = answerMatch[1].toUpperCase();
+      }
+    }
+  });
+
+  if (current) grouped.push(current);
+
+  grouped.forEach((item, index) => {
+    if (!item.question) return;
+    questions.push({
+      _id: `${index + 1}`,
+      question: item.question,
+      options: item.options.length > 0 ? item.options : [
+        { label: "A", text: "Option A" },
+        { label: "B", text: "Option B" },
+        { label: "C", text: "Option C" },
+        { label: "D", text: "Option D" },
+      ],
+      correctAnswer: item.correctAnswer || "",
+    });
+  });
+
+  return questions.slice(0, 20);
+}
+
 export async function uploadStudyMaterial(req, res) {
   const {
     title,
@@ -269,6 +321,26 @@ export async function listStudyMaterials(req, res) {
 
   const materials = await StudyMaterial.find(filter).sort({ subject: 1, contentType: 1, createdAt: -1 });
   res.json({ materials });
+}
+
+export async function processPyqPractice(req, res) {
+  if (!req.file) return res.status(400).json({ error: "A PDF file is required" });
+
+  const fullPath = path.join(__dirname, "../../", `storage/study-materials/${req.file.filename}`);
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  let text = "";
+
+  if (ext === ".pdf") {
+    const data = await pdfParse(fs.readFileSync(fullPath));
+    text = data.text || "";
+  } else {
+    text = fs.readFileSync(fullPath, "utf8");
+  }
+
+  const questions = extractQuestionsFromPdfText(text);
+  const timeLimitMinutes = Number(req.body.timeLimitMinutes || 30);
+
+  res.json({ questions, timeLimitMinutes });
 }
 
 export async function deleteStudyMaterial(req, res) {

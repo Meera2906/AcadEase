@@ -11,7 +11,7 @@ import {
   listCourses, createCourse, updateCourse, deleteCourse,
   listAnnouncements, createAnnouncement, deleteAnnouncement,
   listStudentAnnouncements,
-  uploadStudyMaterial, listStudyMaterials, deleteStudyMaterial,
+  uploadStudyMaterial, listStudyMaterials, deleteStudyMaterial, processPyqPractice,
   getAttendanceReport, getMarksReport,
   getStudentXp, getLeaderboard,
 } from "../controllers/miscController.js";
@@ -62,6 +62,7 @@ router.get("/announcements", asyncHandler(listStudentAnnouncements));
 
 // Study materials
 router.post("/study-materials", requireRole("admin", "superadmin", "faculty"), studyMaterialUpload.single("file"), asyncHandler(uploadStudyMaterial));
+router.post("/study-materials/pyq-practice", studyMaterialUpload.single("file"), asyncHandler(processPyqPractice));
 router.get("/study-materials", asyncHandler(listStudyMaterials));
 router.delete("/study-materials/:id", requireRole("admin", "superadmin", "faculty"), asyncHandler(deleteStudyMaterial));
 

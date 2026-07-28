@@ -1,15 +1,17 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { BookOpen, Plus, GraduationCap, Sparkles, NotebookPen, FileText, Video, ClipboardCheck } from "lucide-react";
 import AppShell from "../components/layout/AppShell.jsx";
 import Toast, { useToast } from "../components/ui/Toast.jsx";
 import api from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import StudyMaterialsPanel from "../components/study/StudyMaterialsPanel.jsx";
+import PyqPracticePanel from "../components/study/PyqPracticePanel.jsx";
 
 export default function StudyMaterialsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast, showToast, clearToast } = useToast();
   const [activeTab, setActiveTab] = useState("academic");
   const [showForm, setShowForm] = useState(false);
@@ -27,8 +29,58 @@ export default function StudyMaterialsPage() {
     timeLimitMinutes: "0",
   });
   const [file, setFile] = useState(null);
+  const [previewItem, setPreviewItem] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [materials, setMaterials] = useState([]);
+
+  useEffect(() => {
+    const tabParam = new URLSearchParams(location.search).get("tab");
+    if (tabParam === "tet") setActiveTab("tet");
+    else if (tabParam === "pyq") setActiveTab("pyq");
+    else setActiveTab("academic");
+  }, [location.search]);
 
   const canManage = user?.role === "admin" || user?.role === "superadmin" || user?.role === "faculty";
+
+  function openUploadForm() {
+    const tetDefaults = {
+      title: "Syllabus & Pattern",
+      description: "TET preparation syllabus and pattern guide",
+      moduleType: "tet",
+      subject: "General",
+      contentType: "text",
+      audience: "students",
+      videoUrl: "",
+      textContent: "Child Development & Pedagogy\nLanguage I & II\nMathematics & Environmental Studies\nPractice-based questions with answer review",
+      quizQuestions: "",
+      timeLimitMinutes: "0",
+    };
+
+    setShowForm(true);
+    setFile(null);
+    setForm(activeTab === "tet" ? tetDefaults : {
+      title: "",
+      description: "",
+      moduleType: activeTab === "tet" ? "tet" : "academic",
+      subject: "English",
+      contentType: "text",
+      audience: "students",
+      videoUrl: "",
+      textContent: "",
+      quizQuestions: "",
+      timeLimitMinutes: "0",
+    });
+  }
+
+  function openPreview(item) {
+    if (!item?.filePath) return;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL
+      ? import.meta.env.VITE_API_BASE_URL.replace(/\/api$/, "")
+      : "http://localhost:5000";
+    const fileUrl = `${baseUrl}${item.filePath.startsWith("/") ? "" : "/"}${item.filePath}`;
+    setPreviewItem(item);
+    setPreviewUrl(fileUrl);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -67,7 +119,7 @@ export default function StudyMaterialsPage() {
             <p className="text-sm text-text-secondary mt-1">Academic modules and TET preparation resources in one place.</p>
           </div>
           {canManage && (
-            <button onClick={() => setShowForm(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white shadow-card hover:bg-signal-dark">
+            <button onClick={openUploadForm} className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white shadow-card hover:bg-signal-dark">
               <Plus size={15} /> Upload content
             </button>
           )}
@@ -80,11 +132,20 @@ export default function StudyMaterialsPage() {
           <button onClick={() => setActiveTab("tet")} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === "tet" ? "bg-ink text-white" : "bg-white border border-border text-text-secondary"}`}>
             <span className="inline-flex items-center gap-2"><Sparkles size={15} /> TET Preparation</span>
           </button>
+          <button onClick={() => setActiveTab("pyq")} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === "pyq" ? "bg-ink text-white" : "bg-white border border-border text-text-secondary"}`}>
+            <span className="inline-flex items-center gap-2"><FileText size={15} /> PYQ Practice</span>
+          </button>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
           <div>
-            {activeTab === "academic" ? <StudyMaterialsPanel moduleType="academic" /> : <StudyMaterialsPanel moduleType="tet" />}
+            {activeTab === "academic" ? (
+              <StudyMaterialsPanel moduleType="academic" onMaterialsLoaded={setMaterials} onPreviewRequest={openPreview} />
+            ) : activeTab === "tet" ? (
+              <StudyMaterialsPanel moduleType="tet" onMaterialsLoaded={setMaterials} onPreviewRequest={openPreview} />
+            ) : (
+              <PyqPracticePanel />
+            )}
           </div>
           <div className="space-y-4">
             <div className="rounded-card border border-border bg-white p-4 shadow-card">
@@ -106,18 +167,52 @@ export default function StudyMaterialsPage() {
               </ul>
             </div>
             <div className="rounded-card border border-border bg-white p-4 shadow-card">
-              <h2 className="text-sm font-semibold text-text-primary">Quick tools</h2>
+              <h2 className="text-sm font-semibold text-text-primary">Syllabus & Pattern</h2>
+              <ul className="mt-3 space-y-2 text-sm text-text-secondary">
+                <li>• Child Development & Pedagogy</li>
+                <li>• Language I & II</li>
+                <li>• Mathematics & Environmental Studies</li>
+                <li>• Practice-based questions with answer review</li>
+              </ul>
+            </div>
+            <div className="rounded-card border border-border bg-white p-4 shadow-card">
+              <h2 className="text-sm font-semibold text-text-primary">Recommended resources</h2>
               <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                <div className="flex items-center gap-2"><NotebookPen size={15} className="text-citrus" /> Note pad for TET prep</div>
-                <div className="flex items-center gap-2"><Video size={15} className="text-signal" /> Embedded learning videos</div>
-                <div className="flex items-center gap-2"><ClipboardCheck size={15} className="text-success" /> Timed practice quiz window</div>
+                <p><span className="font-semibold text-text-primary">Standard Books:</span> Use state board or NCERT/SCERT school textbooks for core concepts.</p>
+                <p><span className="font-semibold text-text-primary">Pedagogy Guides:</span> Use child psychology, teaching methods, and classroom management guides for better preparation.</p>
               </div>
             </div>
-            <button onClick={() => navigate(user?.role === "student" ? "/student/dashboard" : "/admin/dashboard")} className="w-full rounded-xl border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-paper">
+            <div className="rounded-card border border-border bg-white p-4 shadow-card">
+              <h2 className="text-sm font-semibold text-text-primary">Quick links</h2>
+              <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                {materials.filter((item) => item.filePath).slice(0, 4).map((item) => (
+                  <button key={item._id} onClick={() => openPreview(item)} className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:bg-paper">
+                    <span>{item.title}</span>
+                    <span className="text-xs text-signal">Preview</span>
+                  </button>
+                ))}
+                {materials.filter((item) => item.filePath).length === 0 && (
+                  <p className="text-sm text-text-muted">Upload a PDF or image resource to make quick preview links appear here.</p>
+                )}
+              </div>
+            </div>
+            <button onClick={() => navigate(user?.role === "student" ? "/student/dashboard" : user?.role === "faculty" ? "/faculty/dashboard" : "/admin/dashboard")} className="w-full rounded-xl border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-paper">
               Back to dashboard
             </button>
           </div>
         </div>
+
+        {previewItem && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/70 p-4" onClick={() => setPreviewItem(null)}>
+            <div className="w-full max-w-5xl rounded-card bg-white shadow-lift" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h3 className="font-semibold text-text-primary">{previewItem.title}</h3>
+                <button onClick={() => setPreviewItem(null)} className="text-text-muted hover:text-text-primary">✕</button>
+              </div>
+              <iframe src={previewUrl} title={previewItem.title} className="h-[75vh] w-full rounded-b-card" />
+            </div>
+          </div>
+        )}
 
         {showForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm">

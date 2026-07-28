@@ -1,5 +1,4 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
@@ -26,7 +25,6 @@ const NAV_BY_ROLE = {
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
     { to: "/faculty/od-requests",  label: "OD Requests",     icon: MessageSquareWarning },
     { to: "/admin/announcements",  label: "Announcements",   icon: Megaphone },
-    { to: "/faculty/profile",      label: "My Profile",      icon: User },
   ],
   admin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -40,7 +38,6 @@ const NAV_BY_ROLE = {
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
-    { to: "/admin/profile",      label: "My Profile",   icon: User },
   ],
   superadmin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -54,7 +51,6 @@ const NAV_BY_ROLE = {
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
-    { to: "/admin/profile",      label: "My Profile",   icon: User },
   ],
 };
 
@@ -71,6 +67,12 @@ export default function AppShell({ children }) {
   const [bellOpen, setBellOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [navExpanded, setNavExpanded] = useState(false);
+  const studyMaterialsRoute = user?.role === "student" ? "/student/study-materials" : "/admin/study-materials";
+  const profileRoute = user?.role === "student" ? "/student/profile" : user?.role === "faculty" ? "/faculty/profile" : "/admin/profile";
+  const compactNav = user?.role === "admin" || user?.role === "superadmin";
+  const primaryItems = items.slice(0, compactNav ? 5 : items.length);
+  const secondaryItems = compactNav ? items.slice(5) : [];
   const bellRef = useRef(null);
   const mobileRef = useRef(null);
   const materialsRef = useRef(null);
@@ -131,32 +133,42 @@ export default function AppShell({ children }) {
           </NavLink>
 
           {/* Desktop nav links */}
-          <nav className="hidden md:flex items-center gap-1 flex-1">
-            {items.map(({ to, label, icon: Icon }) => {
+          <nav
+            className={`hidden md:flex items-center gap-1 flex-1 overflow-hidden transition-all duration-200 ${compactNav ? "flex-wrap" : ""}`}
+            style={{ maxWidth: compactNav ? (navExpanded ? 720 : 320) : "none" }}
+            onMouseEnter={() => compactNav && setNavExpanded(true)}
+            onMouseLeave={() => compactNav && setNavExpanded(false)}
+          >
+            {primaryItems.map(({ to, label, icon: Icon }) => {
               if (label === "Study Materials") {
                 return (
                   <div key={label} className="relative" ref={materialsRef}>
                     <button
                       onMouseEnter={() => setMaterialsOpen(true)}
-                      onClick={() => setMaterialsOpen((prev) => !prev)}
+                      onMouseLeave={() => setMaterialsOpen(false)}
+                      onFocus={() => setMaterialsOpen(true)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setMaterialsOpen((prev) => !prev);
+                        navigate(studyMaterialsRoute);
+                      }}
                       className="relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors text-white/55 hover:bg-ink-light hover:text-white/90"
                     >
                       <Icon size={15} />
                       {label}
-                      <ChevronDown size={14} className={`transition-transform ${materialsOpen ? "rotate-180" : ""}`} />
                     </button>
 
                     {materialsOpen && (
                       <div className="absolute left-0 top-11 w-56 rounded-card border border-border bg-card shadow-lift overflow-hidden z-50">
                         <NavLink
-                          to="/student/study-materials"
+                          to={`${studyMaterialsRoute}?tab=academic`}
                           onClick={() => setMaterialsOpen(false)}
                           className="flex items-center px-3 py-2.5 text-sm text-text-secondary hover:bg-paper hover:text-text-primary"
                         >
                           Academic Modules
                         </NavLink>
                         <NavLink
-                          to="/student/study-materials"
+                          to={`${studyMaterialsRoute}?tab=tet`}
                           onClick={() => setMaterialsOpen(false)}
                           className="flex items-center px-3 py-2.5 text-sm text-text-secondary hover:bg-paper hover:text-text-primary"
                         >
@@ -192,6 +204,27 @@ export default function AppShell({ children }) {
                 </NavLink>
               );
             })}
+            {compactNav && navExpanded && secondaryItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-ink-light text-white"
+                      : "text-white/55 hover:bg-ink-light hover:text-white/90"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-pill bg-citrus" />}
+                    <Icon size={15} />
+                    {label}
+                  </>
+                )}
+              </NavLink>
+            ))}
           </nav>
 
           {/* Right side */}
@@ -261,11 +294,7 @@ export default function AppShell({ children }) {
             {/* Profile avatar — desktop */}
             <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/10">
               <button
-                onClick={() => {
-                  if (user?.role === "student") navigate("/student/profile");
-                  else if (user?.role === "faculty") navigate("/faculty/profile");
-                  else if (user?.role === "admin" || user?.role === "superadmin") navigate("/admin/profile");
-                }}
+                onClick={() => navigate(profileRoute)}
                 className="flex items-center gap-2 cursor-pointer hover:opacity-80"
               >
                 <div className="w-8 h-8 rounded-full bg-signal text-white flex items-center justify-center text-xs font-bold font-display">
@@ -330,44 +359,6 @@ export default function AppShell({ children }) {
                         )}
                       </NavLink>
                     ))}
-                    {user?.role === "student" && (
-                      <>
-                        <button
-                          onClick={() => { navigate("/student/profile"); setMobileOpen(false); }}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                        >
-                          <User size={17} /> My Profile
-                        </button>
-                        <button
-                          onClick={() => { navigate("/student/study-materials"); setMobileOpen(false); }}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                        >
-                          <BookOpen size={17} /> Academic Modules
-                        </button>
-                        <button
-                          onClick={() => { navigate("/student/study-materials"); setMobileOpen(false); }}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                        >
-                          <BookOpen size={17} /> TET Preparation
-                        </button>
-                      </>
-                    )}
-                    {user?.role === "faculty" && (
-                      <button
-                        onClick={() => { navigate("/faculty/profile"); setMobileOpen(false); }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                      >
-                        <User size={17} /> My Profile
-                      </button>
-                    )}
-                    {(user?.role === "admin" || user?.role === "superadmin") && (
-                      <button
-                        onClick={() => { navigate("/admin/profile"); setMobileOpen(false); }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                      >
-                        <User size={17} /> My Profile
-                      </button>
-                    )}
                   </nav>
                   <div className="px-2 py-2 border-t border-white/10">
                     <button
