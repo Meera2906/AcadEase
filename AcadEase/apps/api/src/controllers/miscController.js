@@ -445,11 +445,8 @@ export async function uploadStudyMaterial(req, res) {
   }
 
   return res.status(500).json({ error: "Failed to save study material", details: err?.message });
+  }
 }
-
-
-}
-
 
 export async function listStudyMaterials(req, res) {
   const role = req.user.role;
