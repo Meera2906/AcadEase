@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import pdfParse from "pdf-parse";
 import { fileURLToPath } from "url";
 import {
   Notification,
@@ -152,20 +153,102 @@ export async function deleteResume(req, res) {
 
 // ---------- Study materials ----------
 
+function parseQuizQuestions(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) return input;
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function generateQuizFromText(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const questions = lines
+    .filter((line) => line.includes("?") || /^\d+/.test(line))
+    .slice(0, 6)
+    .map((line, index) => ({
+      question: line.replace(/^\d+\s*[-.)]*/, "").trim(),
+      options: ["A", "B", "C", "D"].map((option) => `${option}. ${line}`),
+      correctAnswer: "A",
+      explanation: "Review the uploaded paper for the exact answer.",
+      _id: `${index + 1}`,
+    }));
+
+  return questions;
+}
+
 export async function uploadStudyMaterial(req, res) {
-  const { title, description = "", category = "general", audience = "all" } = req.body;
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  const {
+    title,
+    description = "",
+    audience = "all",
+    moduleType = "academic",
+    subject = "General",
+    contentType = "text",
+    videoUrl = "",
+    textContent = "",
+    timeLimitMinutes = 0,
+    quizQuestions,
+    paperText = "",
+  } = req.body;
+
   if (!title) return res.status(400).json({ error: "title is required" });
+
+  let fileName = "";
+  let filePath = "";
+  let mimeType = "application/octet-stream";
+  let fileSize = 0;
+  let parsedText = textContent || paperText || "";
+
+  if (req.file) {
+    fileName = req.file.originalname;
+    filePath = `storage/study-materials/${req.file.filename}`;
+    mimeType = req.file.mimetype || "application/octet-stream";
+    fileSize = req.file.size || 0;
+
+    const fullPath = path.join(__dirname, "../../", filePath);
+    const ext = path.extname(req.file.originalname).toLowerCase();
+
+    if (ext === ".pdf") {
+      const data = await pdfParse(fs.readFileSync(fullPath));
+      parsedText = data.text || parsedText;
+    } else if (ext === ".txt") {
+      parsedText = fs.readFileSync(fullPath, "utf8");
+    }
+  }
+
+  const normalizedQuizQuestions = parseQuizQuestions(quizQuestions);
+  const generatedQuestions = normalizedQuizQuestions.length > 0
+    ? normalizedQuizQuestions
+    : (contentType === "quiz" || contentType === "paper") && (parsedText || paperText)
+      ? generateQuizFromText(parsedText || paperText)
+      : [];
 
   const material = await StudyMaterial.create({
     title: title.trim(),
     description: description.trim(),
-    category: ["general", "tet"].includes(category) ? category : "general",
+    moduleType: ["academic", "tet"].includes(moduleType) ? moduleType : "academic",
+    subject: subject.trim() || "General",
+    contentType: ["video", "text", "textbook", "quiz", "paper", "note"].includes(contentType) ? contentType : "text",
     audience: ["all", "students", "faculty"].includes(audience) ? audience : "all",
-    fileName: req.file.originalname,
-    filePath: `storage/study-materials/${req.file.filename}`,
-    mimeType: req.file.mimetype || "application/octet-stream",
-    fileSize: req.file.size || 0,
+    fileName,
+    filePath,
+    mimeType,
+    fileSize,
+    videoUrl: videoUrl || "",
+    textContent: parsedText,
+    quizQuestions: generatedQuestions,
+    timeLimitMinutes: Number(timeLimitMinutes) || 0,
     uploadedBy: req.user.userId,
     institutionId: req.user.institutionId,
     departmentId: req.user.departmentId || null,
@@ -177,12 +260,14 @@ export async function uploadStudyMaterial(req, res) {
 export async function listStudyMaterials(req, res) {
   const role = req.user.role;
   const filter = { institutionId: req.user.institutionId, isActive: true };
+  const moduleType = req.query.moduleType;
 
+  if (moduleType) filter.moduleType = moduleType;
   if (role === "student") {
     filter.$or = [{ audience: "all" }, { audience: "students" }];
   }
 
-  const materials = await StudyMaterial.find(filter).sort({ category: 1, createdAt: -1 });
+  const materials = await StudyMaterial.find(filter).sort({ subject: 1, contentType: 1, createdAt: -1 });
   res.json({ materials });
 }
 

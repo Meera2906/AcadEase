@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
@@ -69,8 +70,10 @@ export default function AppShell({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [bellOpen, setBellOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [materialsOpen, setMaterialsOpen] = useState(false);
   const bellRef = useRef(null);
   const mobileRef = useRef(null);
+  const materialsRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +88,7 @@ export default function AppShell({ children }) {
     function outside(e) {
       if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false);
       if (mobileRef.current && !mobileRef.current.contains(e.target)) setMobileOpen(false);
+      if (materialsRef.current && !materialsRef.current.contains(e.target)) setMaterialsOpen(false);
     }
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
@@ -128,29 +132,66 @@ export default function AppShell({ children }) {
 
           {/* Desktop nav links */}
           <nav className="hidden md:flex items-center gap-1 flex-1">
-            {items.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-ink-light text-white"
-                      : "text-white/55 hover:bg-ink-light hover:text-white/90"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-pill bg-citrus" />
+            {items.map(({ to, label, icon: Icon }) => {
+              if (label === "Study Materials") {
+                return (
+                  <div key={label} className="relative" ref={materialsRef}>
+                    <button
+                      onMouseEnter={() => setMaterialsOpen(true)}
+                      onClick={() => setMaterialsOpen((prev) => !prev)}
+                      className="relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors text-white/55 hover:bg-ink-light hover:text-white/90"
+                    >
+                      <Icon size={15} />
+                      {label}
+                      <ChevronDown size={14} className={`transition-transform ${materialsOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {materialsOpen && (
+                      <div className="absolute left-0 top-11 w-56 rounded-card border border-border bg-card shadow-lift overflow-hidden z-50">
+                        <NavLink
+                          to="/student/study-materials"
+                          onClick={() => setMaterialsOpen(false)}
+                          className="flex items-center px-3 py-2.5 text-sm text-text-secondary hover:bg-paper hover:text-text-primary"
+                        >
+                          Academic Modules
+                        </NavLink>
+                        <NavLink
+                          to="/student/study-materials"
+                          onClick={() => setMaterialsOpen(false)}
+                          className="flex items-center px-3 py-2.5 text-sm text-text-secondary hover:bg-paper hover:text-text-primary"
+                        >
+                          TET Preparation
+                        </NavLink>
+                      </div>
                     )}
-                    <Icon size={15} />
-                    {label}
-                  </>
-                )}
-              </NavLink>
-            ))}
+                  </div>
+                );
+              }
+
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `relative flex items-center gap-2 px-3 py-2 rounded-card text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-ink-light text-white"
+                        : "text-white/55 hover:bg-ink-light hover:text-white/90"
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-pill bg-citrus" />
+                      )}
+                      <Icon size={15} />
+                      {label}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
 
           {/* Right side */}
@@ -290,12 +331,26 @@ export default function AppShell({ children }) {
                       </NavLink>
                     ))}
                     {user?.role === "student" && (
-                      <button
-                        onClick={() => { navigate("/student/profile"); setMobileOpen(false); }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
-                      >
-                        <User size={17} /> My Profile
-                      </button>
+                      <>
+                        <button
+                          onClick={() => { navigate("/student/profile"); setMobileOpen(false); }}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
+                        >
+                          <User size={17} /> My Profile
+                        </button>
+                        <button
+                          onClick={() => { navigate("/student/study-materials"); setMobileOpen(false); }}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
+                        >
+                          <BookOpen size={17} /> Academic Modules
+                        </button>
+                        <button
+                          onClick={() => { navigate("/student/study-materials"); setMobileOpen(false); }}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-card text-sm font-medium text-white/55 hover:bg-ink-light hover:text-white/90 w-full transition-colors"
+                        >
+                          <BookOpen size={17} /> TET Preparation
+                        </button>
+                      </>
                     )}
                     {user?.role === "faculty" && (
                       <button
