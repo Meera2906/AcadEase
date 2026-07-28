@@ -187,56 +187,183 @@ function generateQuizFromText(text) {
   return questions;
 }
 
-function extractQuestionsFromPdfText(text) {
-  const lines = text
-    .split(/\r?\n/)
+function extractAnswerKeyMap(text) {
+  const lines = (text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\*\*/g, "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const answerMap = new Map();
+  let inAnswerKey = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const cleaned = line.replace(/^[-•*#\s]+/, "").trim();
+
+    if (/^answer\s+key$/i.test(cleaned) || /^answer$/i.test(cleaned)) {
+      inAnswerKey = true;
+      continue;
+    }
+
+    if (!inAnswerKey) continue;
+
+    const pairMatch = cleaned.match(/^(\d{1,2})\s*[:.)-]?\s*([A-Da-d])$/i);
+    if (pairMatch) {
+      answerMap.set(Number(pairMatch[1]), pairMatch[2].toUpperCase());
+      continue;
+    }
+
+    const nextLine = lines[index + 1] || "";
+    const numberMatch = cleaned.match(/^(\d{1,2})$/);
+    if (numberMatch) {
+      const nextLetterMatch = nextLine.match(/^([A-Da-d])$/i);
+      if (nextLetterMatch) {
+        answerMap.set(Number(numberMatch[1]), nextLetterMatch[1].toUpperCase());
+        continue;
+      }
+    }
+
+    const tableMatch = cleaned.match(/^question\s*(\d{1,2})$/i);
+    if (tableMatch) {
+      const nextLetterMatch = nextLine.match(/^([A-Da-d])$/i);
+      if (nextLetterMatch) {
+        answerMap.set(Number(tableMatch[1]), nextLetterMatch[1].toUpperCase());
+      }
+    }
+  }
+
+  return answerMap;
+}
+
+export function extractQuestionsFromPdfText(text) {
+  const raw = (text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\*\*/g, "")
+    .replace(/\r/g, "")
+    .trim();
+
+  const lines = raw
+    .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
   const questions = [];
-  const grouped = [];
   let current = null;
+  let pendingQuestionNumber = null;
+  let inAnswerKey = false;
+  const answerMap = extractAnswerKeyMap(raw);
 
-  lines.forEach((line) => {
-    const questionMatch = line.match(/^(\d{1,2}|[A-Z])[.)\-\s]+(.+)$/);
-    if (questionMatch) {
-      if (current) grouped.push(current);
-      current = { question: questionMatch[2], options: [], correctAnswer: "" };
-      return;
-    }
-
-    if (current) {
-      const optionMatch = line.match(/^([A-Da-d])[.)\-\s]+(.+)$/);
-      if (optionMatch) {
-        current.options.push({ label: optionMatch[1].toUpperCase(), text: optionMatch[2] });
-        return;
-      }
-
-      if (/answer|ans|correct/i.test(line)) {
-        const answerMatch = line.match(/([A-Da-d])/);
-        if (answerMatch) current.correctAnswer = answerMatch[1].toUpperCase();
-      }
-    }
-  });
-
-  if (current) grouped.push(current);
-
-  grouped.forEach((item, index) => {
-    if (!item.question) return;
+  function flushCurrent() {
+    if (!current || !current.question) return;
     questions.push({
-      _id: `${index + 1}`,
-      question: item.question,
-      options: item.options.length > 0 ? item.options : [
+      _id: `${current.number}`,
+      question: current.question.trim(),
+      options: current.options.length > 0 ? current.options : [
         { label: "A", text: "Option A" },
         { label: "B", text: "Option B" },
         { label: "C", text: "Option C" },
         { label: "D", text: "Option D" },
       ],
-      correctAnswer: item.correctAnswer || "",
+      correctAnswer: current.correctAnswer || "",
     });
+  }
+
+  lines.forEach((line) => {
+    const cleaned = line.replace(/^[-•*#\s]+/, "").trim();
+
+    if (!cleaned) return;
+
+    if (/^answer\s+key$/i.test(cleaned)) {
+      inAnswerKey = true;
+      return;
+    }
+
+    if (inAnswerKey) {
+      const pairMatch = cleaned.match(/^(\d{1,2})\s*[:.)-]?\s*([A-Da-d])$/i);
+      if (pairMatch) {
+        pendingQuestionNumber = null;
+        if (current && current.number === Number(pairMatch[1])) {
+          current.correctAnswer = pairMatch[2].toUpperCase();
+        }
+        return;
+      }
+
+      const numberMatch = cleaned.match(/^(\d{1,2})$/);
+      if (numberMatch) {
+        pendingQuestionNumber = Number(numberMatch[1]);
+        return;
+      }
+
+      const answerLetterMatch = cleaned.match(/^([A-Da-d])$/i);
+      if (answerLetterMatch && pendingQuestionNumber) {
+        const target = questions.find((q) => Number(q._id) === pendingQuestionNumber);
+        if (target) target.correctAnswer = answerLetterMatch[1].toUpperCase();
+        pendingQuestionNumber = null;
+        return;
+      }
+    }
+
+    const questionHeadingMatch = cleaned.match(/^question\s*(\d{1,2})$/i);
+    if (questionHeadingMatch) {
+      flushCurrent();
+      current = {
+        number: Number(questionHeadingMatch[1]),
+        question: "",
+        options: [],
+        correctAnswer: "",
+      };
+      return;
+    }
+
+    const numberedHeadingMatch = cleaned.match(/^(\d{1,2})[.):-]?$/);
+    if (numberedHeadingMatch && !current) {
+      current = {
+        number: Number(numberedHeadingMatch[1]),
+        question: "",
+        options: [],
+        correctAnswer: "",
+      };
+      return;
+    }
+
+    if (current) {
+      const optionMatch = cleaned.match(/^([A-Da-d])[.):-]\s*(.+)$/i);
+      if (optionMatch) {
+        current.options.push({
+          label: optionMatch[1].toUpperCase(),
+          text: optionMatch[2].trim(),
+        });
+        return;
+      }
+
+      const optionLineMatch = cleaned.match(/^([A-Da-d])\s+(.+)$/i);
+      if (optionLineMatch) {
+        current.options.push({
+          label: optionLineMatch[1].toUpperCase(),
+          text: optionLineMatch[2].trim(),
+        });
+        return;
+      }
+
+      if (/^answer|^correct|^solution/i.test(cleaned)) {
+        const answerMatch = cleaned.match(/([A-Da-d])/i);
+        if (answerMatch) current.correctAnswer = answerMatch[1].toUpperCase();
+        return;
+      }
+
+      current.question = current.question ? `${current.question} ${cleaned}` : cleaned;
+    }
   });
 
-  return questions.slice(0, 20);
+  flushCurrent();
+
+  return questions.slice(0, 20).map((question) => ({
+    ...question,
+    correctAnswer: question.correctAnswer || answerMap.get(Number(question._id)) || "",
+  }));
 }
 
 export async function uploadStudyMaterial(req, res) {

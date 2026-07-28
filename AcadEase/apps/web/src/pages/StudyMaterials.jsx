@@ -41,6 +41,11 @@ export default function StudyMaterialsPage() {
   }, [location.search]);
 
   const canManage = user?.role === "admin" || user?.role === "superadmin" || user?.role === "faculty";
+  const quickLinkMaterials = materials.filter((item) => {
+    if (!item?.filePath) return false;
+    const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    return haystack.includes("syllabus") || haystack.includes("guide");
+  });
 
   function openUploadForm() {
     const tetDefaults = {
@@ -185,14 +190,14 @@ export default function StudyMaterialsPage() {
             <div className="rounded-card border border-border bg-white p-4 shadow-card">
               <h2 className="text-sm font-semibold text-text-primary">Quick links</h2>
               <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                {materials.filter((item) => item.filePath).slice(0, 4).map((item) => (
+                {quickLinkMaterials.slice(0, 4).map((item) => (
                   <button key={item._id} onClick={() => openPreview(item)} className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left hover:bg-paper">
                     <span>{item.title}</span>
                     <span className="text-xs text-signal">Preview</span>
                   </button>
                 ))}
-                {materials.filter((item) => item.filePath).length === 0 && (
-                  <p className="text-sm text-text-muted">Upload a PDF or image resource to make quick preview links appear here.</p>
+                {quickLinkMaterials.length === 0 && (
+                  <p className="text-sm text-text-muted">Upload syllabus or guide materials with a PDF attachment to see them here.</p>
                 )}
               </div>
             </div>

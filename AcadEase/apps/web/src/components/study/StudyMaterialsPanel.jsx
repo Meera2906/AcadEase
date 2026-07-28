@@ -198,6 +198,18 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
                   <span className="rounded-full bg-citrus/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-citrus">Text</span>
                 </div>
                 {item.description ? <p className="mt-3 text-sm text-text-secondary">{item.description}</p> : <p className="mt-3 text-sm text-text-muted">Prepared learning material is available for this module.</p>}
+                {item.filePath ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {isPreviewable(item) && (
+                      <button onClick={() => onPreviewRequest?.(item)} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-white">
+                        Preview PDF
+                      </button>
+                    )}
+                    <a href={getFileUrl(item.filePath)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-light">
+                      <Download size={13} /> Download file
+                    </a>
+                  </div>
+                ) : null}
               </div>
             ))}
 

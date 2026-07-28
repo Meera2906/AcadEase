@@ -201,8 +201,8 @@ export default function PyqPracticePanel() {
                 ) : (
                   <p className="mt-1 text-sm text-text-muted">No answer key was detected in the uploaded PDF.</p>
                 )}
-                <p className={`mt-2 text-sm font-semibold ${question.isCorrect ? "text-success" : "text-warning"}`}>
-                  {question.isCorrect ? "Correct" : "Marked for review"}
+                <p className={`mt-2 text-sm font-semibold ${question.isCorrect ? "text-success" : question.selectedAnswer ? "text-warning" : "text-text-muted"}`}>
+                  {!question.selectedAnswer ? "Not answered" : question.isCorrect ? "Correct" : "Incorrect"}
                 </p>
               </div>
             ))}
