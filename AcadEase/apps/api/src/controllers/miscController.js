@@ -413,6 +413,7 @@ export async function uploadStudyMaterial(req, res) {
       ? generateQuizFromText(parsedText || paperText)
       : [];
 
+  try {
   const material = await StudyMaterial.create({
     title: title.trim(),
     description: description.trim(),
@@ -434,7 +435,21 @@ export async function uploadStudyMaterial(req, res) {
   });
 
   res.status(201).json({ material });
+} catch (err) {
+  console.error("[uploadStudyMaterial] validation error or exception:", err?.message || err);
+  console.error("[uploadStudyMaterial] body keys:", Object.keys(req.body || {}));
+  console.error("[uploadStudyMaterial] file:", req.file ? { originalname: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size } : null);
+
+  if (err && err.name === "ValidationError") {
+    return res.status(400).json({ error: err.message, details: err.errors });
+  }
+
+  return res.status(500).json({ error: "Failed to save study material", details: err?.message });
 }
+
+
+}
+
 
 export async function listStudyMaterials(req, res) {
   const role = req.user.role;

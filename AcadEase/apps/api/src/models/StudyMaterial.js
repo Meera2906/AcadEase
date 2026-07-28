@@ -6,7 +6,7 @@ const studyMaterialSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     moduleType: { type: String, enum: ["academic", "tet"], default: "academic" },
     subject: { type: String, default: "General" },
-    contentType: { type: String, enum: ["video", "text", "textbook", "quiz", "paper", "note"], default: "text" },
+    contentType: { type: String, enum: ["video", "text", "textbook", "quiz", "paper", "note", "syllabus", "guide"], default: "text" },
     audience: { type: String, enum: ["all", "students", "faculty"], default: "all" },
     fileName: { type: String, default: "" },
     filePath: { type: String, default: "" },
