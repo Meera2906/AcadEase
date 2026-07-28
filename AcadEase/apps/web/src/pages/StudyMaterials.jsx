@@ -43,6 +43,8 @@ export default function StudyMaterialsPage() {
   const canManage = user?.role === "admin" || user?.role === "superadmin" || user?.role === "faculty";
   const quickLinkMaterials = materials.filter((item) => {
     if (!item?.filePath) return false;
+    // Show if contentType explicitly marked, or title/description mentions syllabus/guide
+    if (item.contentType === "syllabus" || item.contentType === "guide") return true;
     const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
     return haystack.includes("syllabus") || haystack.includes("guide");
   });
@@ -105,6 +107,13 @@ export default function StudyMaterialsPage() {
       setShowForm(false);
       setForm({ title: "", description: "", moduleType: activeTab === "tet" ? "tet" : "academic", subject: "English", contentType: "text", audience: "students", videoUrl: "", textContent: "", quizQuestions: "", timeLimitMinutes: "0" });
       setFile(null);
+      // Refresh materials so quick links update immediately
+      try {
+        const resp = await api.get("/study-materials", { params: { moduleType: form.moduleType } });
+        setMaterials(resp.data.materials || []);
+      } catch (e) {
+        // ignore fetch errors; panel will update on next mount
+      }
     } catch (err) {
       showToast(err.response?.data?.error || "Upload failed", "error");
     } finally {
