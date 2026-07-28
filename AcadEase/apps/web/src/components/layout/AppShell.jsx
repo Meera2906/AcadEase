@@ -30,13 +30,13 @@ const NAV_BY_ROLE = {
   admin: [
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
     { to: "/admin/users",        label: "Users",        icon: Users },
+    { to: "/admin/results",      label: "Results",      icon: ClipboardList },
+    { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
+    { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
     { to: "/admin/departments",  label: "Departments",  icon: Building2 },
     { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
-    { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
-    { to: "/admin/marks",        label: "Marks",        icon: ClipboardList },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
     { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
-    { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
@@ -46,7 +46,6 @@ const NAV_BY_ROLE = {
     { to: "/admin/departments",  label: "Departments",  icon: Building2 },
     { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
     { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
-    { to: "/admin/marks",        label: "Marks",        icon: ClipboardList },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
     { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
@@ -73,8 +72,8 @@ export default function AppShell({ children }) {
   const studyMaterialsRoute = user?.role === "student" ? "/student/study-materials" : "/admin/study-materials";
   const profileRoute = user?.role === "student" ? "/student/profile" : user?.role === "faculty" ? "/faculty/profile" : "/admin/profile";
   const compactNav = user?.role === "admin" || user?.role === "superadmin";
-  const primaryItems = items.slice(0, compactNav ? 5 : items.length);
-  const secondaryItems = compactNav ? items.slice(5) : [];
+  const primaryItems = compactNav ? items : items;
+  const secondaryItems = [];
   const bellRef = useRef(null);
   const mobileRef = useRef(null);
   const materialsRef = useRef(null);
@@ -138,10 +137,8 @@ export default function AppShell({ children }) {
 
           {/* Desktop nav links */}
           <nav
-            className={`hidden md:flex items-center gap-1 flex-1 overflow-hidden transition-all duration-200 ${compactNav ? "flex-wrap" : ""}`}
-            style={{ maxWidth: compactNav ? (navExpanded ? 720 : 320) : "none" }}
-            onMouseEnter={() => compactNav && setNavExpanded(true)}
-            onMouseLeave={() => compactNav && setNavExpanded(false)}
+            className="hidden md:flex items-center gap-1 flex-1 overflow-x-auto whitespace-nowrap transition-all duration-200"
+            style={{ maxWidth: "100%" }}
           >
             {primaryItems.map(({ to, label, icon: Icon }) => {
               if (label === "Study Materials") {
@@ -208,42 +205,6 @@ export default function AppShell({ children }) {
                 </NavLink>
               );
             })}
-            {compactNav && secondaryItems.length > 0 && (
-              <div className="relative" ref={moreRef}>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setMoreOpen((prev) => !prev);
-                  }}
-                  className="flex items-center gap-2 rounded-card px-3 py-2 text-sm font-medium text-white/80 transition-colors"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <BookOpen size={15} /> More
-                  </span>
-                  <ChevronDown size={14} className={`transition-transform ${moreOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {moreOpen && (
-                  <div className="absolute left-0 top-11 w-56 rounded-card border border-border bg-card shadow-lift overflow-hidden z-50">
-                    {secondaryItems.map(({ to, label, icon: Icon }) => (
-                      <NavLink
-                        key={to}
-                        to={to}
-                        onClick={() => setMoreOpen(false)}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2 px-3 py-2.5 text-sm transition-colors ${
-                            isActive ? "bg-paper text-text-primary" : "text-text-secondary"
-                          }`
-                        }
-                      >
-                        <Icon size={15} />
-                        {label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </nav>
 
           {/* Right side */}

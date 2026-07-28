@@ -74,6 +74,7 @@ export default function App() {
       <Route path="/admin/certificates" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminCertificates /></ProtectedRoute>} />
       <Route path="/admin/grievances" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminGrievances /></ProtectedRoute>} />
       <Route path="/admin/attendance" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminAttendance /></ProtectedRoute>} />
+      <Route path="/admin/results" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
       <Route path="/admin/marks" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
       <Route path="/admin/announcements" element={<ProtectedRoute roles={["admin", "superadmin", "faculty"]}><AdminAnnouncements /></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>} />
