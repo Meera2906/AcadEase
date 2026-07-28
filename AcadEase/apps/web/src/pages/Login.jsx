@@ -6,7 +6,7 @@ import Button from "../components/ui/Button.jsx";
 
 const ROLE_HOME = {
   student:    "/student/dashboard",
-  faculty:    "/faculty/attendance",
+  faculty:    "/faculty/dashboard",
   admin:      "/admin/dashboard",
   superadmin: "/admin/dashboard",
 };

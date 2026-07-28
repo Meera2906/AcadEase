@@ -20,6 +20,7 @@ const NAV_BY_ROLE = {
     { to: "/student/od-requests",  label: "OD Requests",  icon: ClipboardList },
   ],
   faculty: [
+    { to: "/faculty/dashboard",    label: "Dashboard",       icon: LayoutDashboard },
     { to: "/faculty/attendance",   label: "Mark Attendance", icon: CalendarCheck },
     { to: "/faculty/results",      label: "Results",         icon: ClipboardList },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
