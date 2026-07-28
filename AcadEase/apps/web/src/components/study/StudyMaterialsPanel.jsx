@@ -94,6 +94,20 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
     });
   };
 
+  const downloadNotePad = () => {
+    const content = notes.general || "";
+    const fileName = `study-notes-${moduleType}-${new Date().toISOString().slice(0, 10)}.txt`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
   const isPreviewable = (item) => {
     const filePath = item?.filePath || "";
     return Boolean(filePath) && /\.pdf$/i.test(filePath) || item?.mimeType?.includes("pdf") || item?.mimeType?.includes("image");
@@ -117,7 +131,7 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
       )}
 
       {moduleType === "tet" && showCalculator && (
-        <div className="fixed z-50 w-72 max-w-[90vw] rounded-2xl border border-border bg-white shadow-lift" style={{ left: `${notePos.x + 320}px`, top: `${notePos.y}px` }}>
+        <div className="fixed z-[80] w-72 max-w-[90vw] rounded-2xl border border-border bg-white shadow-lift" style={{ left: `${notePos.x + 320}px`, top: `${notePos.y}px` }}>
           <div className="border-b border-border px-3 py-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-text-primary">Calculator</span>
@@ -138,7 +152,7 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
 
       {moduleType === "tet" && showNotePad && (
         <div
-          className="fixed z-50 w-80 max-w-[90vw] rounded-2xl border border-border bg-white shadow-lift"
+          className="fixed z-[90] w-80 max-w-[90vw] rounded-2xl border border-border bg-white shadow-lift"
           style={{ left: `${notePos.x}px`, top: `${notePos.y}px` }}
           onMouseMove={onDrag}
           onMouseUp={stopDrag}
@@ -151,7 +165,17 @@ export default function StudyMaterialsPanel({ moduleType = "academic", onMateria
             </div>
             <button onClick={() => setShowNotePad(false)} className="text-text-muted hover:text-text-primary">✕</button>
           </div>
-          <div className="p-3">
+          <div className="p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-text-muted">Notes are saved in the browser session.</span>
+              <button
+                type="button"
+                onClick={downloadNotePad}
+                className="inline-flex items-center gap-2 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-light"
+              >
+                <Download size={14} /> Download
+              </button>
+            </div>
             <textarea
               rows={8}
               value={notes.general || ""}

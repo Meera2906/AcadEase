@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle, Flame, Zap, Trophy, TrendingUp,
   CalendarCheck, ClipboardList, FileBadge, MessageSquareWarning,
-  ChevronRight, BookOpen, Clock, Megaphone, X,
+  ChevronRight, BookOpen, FileText, Clock, Megaphone, X,
 } from "lucide-react";
 import api from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -124,6 +124,7 @@ export default function StudentDashboard() {
   const [todaySchedule, setTodaySchedule] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [dismissedAnns, setDismissedAnns] = useState(new Set());
+  const [resourceCounts, setResourceCounts] = useState({ academic: 0, tet: 0, practiceReady: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -136,7 +137,13 @@ export default function StudentDashboard() {
       api.get("/assessments/mine").catch(() => ({ data: { assessments: [] } })),
       api.get(`/attendance/today-schedule/${user.userId}`).catch(() => ({ data: null })),
       api.get("/announcements").catch(() => ({ data: { announcements: [] } })),
-    ]).then(([s, x, m, lb, a, ts, anns]) => {
+      api.get("/study-materials", { params: { moduleType: "academic" } }).catch(() => ({ data: { materials: [] } })),
+      api.get("/study-materials", { params: { moduleType: "tet" } }).catch(() => ({ data: { materials: [] } })),
+    ]).then(([s, x, m, lb, a, ts, anns, am, tm]) => {
+      const academicMaterials = am.data.materials || [];
+      const tetMaterials = tm.data.materials || [];
+      const practiceReady = [...academicMaterials, ...tetMaterials].filter((item) => ["quiz", "paper"].includes(item.contentType)).length;
+
       setSummary(s.data);
       setXp(x.data);
       setMarks(m.data.marks || []);
@@ -144,6 +151,7 @@ export default function StudentDashboard() {
       setAssessments(a.data.assessments || []);
       setTodaySchedule(ts.data);
       setAnnouncements(anns.data.announcements || []);
+      setResourceCounts({ academic: academicMaterials.length, tet: tetMaterials.length, practiceReady });
     }).finally(() => setLoading(false));
   }, [user]);
 
@@ -256,11 +264,36 @@ export default function StudentDashboard() {
                 )}
               </div>
 
+              <div className="bg-white rounded-card border border-border p-4 shadow-card">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">Learning resources</p>
+                    <p className="text-xs text-text-muted">Materials available now</p>
+                  </div>
+                  <button onClick={() => navigate("/student/study-materials")} className="text-xs font-medium text-signal hover:underline">Open</button>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-paper p-3 text-center">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted">Academic</p>
+                    <p className="mt-2 text-2xl font-bold text-text-primary">{resourceCounts.academic}</p>
+                  </div>
+                  <div className="rounded-xl bg-paper p-3 text-center">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted">TET</p>
+                    <p className="mt-2 text-2xl font-bold text-text-primary">{resourceCounts.tet}</p>
+                  </div>
+                  <div className="rounded-xl bg-paper p-3 text-center">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted">Practice</p>
+                    <p className="mt-2 text-2xl font-bold text-text-primary">{resourceCounts.practiceReady}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Quick actions 2×2 */}
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <ActionTile icon={CalendarCheck} label="Attendance" to="/student/attendance" color="bg-signal" />
                 <ActionTile icon={ClipboardList} label="Results" to="/student/results" color="bg-teal" />
                 <ActionTile icon={BookOpen} label="Materials" to="/student/study-materials" color="bg-signal" />
+                <ActionTile icon={FileText} label="PYQ Practice" to="/student/study-materials?tab=pyq" color="bg-citrus" />
                 <ActionTile icon={FileBadge} label="Certificates" to="/student/certificates" color="bg-success" />
                 <ActionTile icon={MessageSquareWarning} label="Grievances" to="/student/grievances" color="bg-coral" />
               </div>

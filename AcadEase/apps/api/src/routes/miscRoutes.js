@@ -39,7 +39,7 @@ router.patch("/admin/users/:id", requireRole("superadmin"), asyncHandler(editUse
 router.post("/admin/users/bulk-import", requireRole("superadmin"), asyncHandler(bulkImportUsers));
 
 // Admin: dashboard
-router.get("/admin/dashboard", requireRole("admin", "superadmin"), asyncHandler(getAdminDashboard));
+router.get("/admin/dashboard", requireRole("admin", "superadmin", "faculty"), asyncHandler(getAdminDashboard));
 
 // Admin: departments
 router.get("/admin/departments", requireRole("admin", "superadmin"), asyncHandler(listDepartments));

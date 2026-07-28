@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarCheck, ClipboardList, BookOpen, MessageSquareWarning, Megaphone, GraduationCap, ChevronRight, Sparkles } from "lucide-react";
+import { CalendarCheck, ClipboardList, BookOpen, MessageSquareWarning, Megaphone, GraduationCap, ChevronRight, Sparkles, FileText } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
 import StatCard from "../../components/ui/StatCard.jsx";
@@ -22,16 +22,28 @@ function QuickCard({ icon: Icon, label, sub, to, color }) {
 export default function FacultyDashboard() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
+  const [materialCounts, setMaterialCounts] = useState({ academic: 0, tet: 0, practiceReady: 0 });
   const navigate = useNavigate();
 
   useEffect(() => {
     Promise.all([
       api.get("/admin/dashboard").catch(() => ({ data: {} })),
       api.get("/announcements").catch(() => ({ data: { announcements: [] } })),
-    ]).then(([dash, anns]) => {
+      api.get("/study-materials", { params: { moduleType: "academic" } }).catch(() => ({ data: { materials: [] } })),
+      api.get("/study-materials", { params: { moduleType: "tet" } }).catch(() => ({ data: { materials: [] } })),
+    ]).then(([dash, anns, academicRes, tetRes]) => {
+      const academicMaterials = academicRes.data.materials || [];
+      const tetMaterials = tetRes.data.materials || [];
+      const practiceReady = [...academicMaterials, ...tetMaterials].filter((item) => ["quiz", "paper"].includes(item.contentType)).length;
+
       setStats({
         ...dash.data,
         announcements: anns.data.announcements || [],
+      });
+      setMaterialCounts({
+        academic: academicMaterials.length,
+        tet: tetMaterials.length,
+        practiceReady,
       });
     }).finally(() => setLoading(false));
   }, []);
@@ -62,8 +74,13 @@ export default function FacultyDashboard() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard icon={CalendarCheck} label="Attendance" value="Mark now" gradient="bg-gradient-warning" sub="Daily class updates" onClick={() => navigate("/faculty/attendance")} />
           <StatCard icon={ClipboardList} label="Results" value="Enter marks" gradient="bg-gradient-success" sub="Assessment entry" onClick={() => navigate("/faculty/results")} />
-          <StatCard icon={BookOpen} label="Study Materials" value="Upload" gradient="bg-ink-fade" sub="Academic + TET" onClick={() => navigate("/admin/study-materials")} />
+          <StatCard icon={BookOpen} label="Study Materials" value={`${materialCounts.academic + materialCounts.tet}`} gradient="bg-ink-fade" sub={`${materialCounts.academic} academic · ${materialCounts.tet} TET`} onClick={() => navigate("/admin/study-materials")} />
           <StatCard icon={MessageSquareWarning} label="OD Requests" value="Review" gradient="bg-gradient-danger" sub="Pending requests" onClick={() => navigate("/faculty/od-requests")} />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-3">
+          <StatCard icon={Sparkles} label="Practice Ready" value={materialCounts.practiceReady} gradient="bg-gradient-citrus" sub="Quizzes & papers" onClick={() => navigate("/admin/study-materials?tab=tet")} />
+          <StatCard icon={BookOpen} label="Academic Resources" value={materialCounts.academic} gradient="bg-gradient-success" sub="Learning modules" onClick={() => navigate("/admin/study-materials?tab=academic")} />
+          <StatCard icon={BookOpen} label="TET Resources" value={materialCounts.tet} gradient="bg-gradient-ink" sub="Exam prep" onClick={() => navigate("/admin/study-materials?tab=tet")} />
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
