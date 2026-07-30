@@ -17,6 +17,7 @@ export default function CertVerify() {
 
   const isValid   = result?.verified === true;
   const isRevoked = result?.status === "revoked";
+  const signatureValid = result?.signatureValid !== false;
 
   return (
     <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-4">
@@ -74,6 +75,7 @@ export default function CertVerify() {
             <Row label="Certificate Type"  value={capitalize(result.certificateType)} />
             <Row label="Issue Date"        value={new Date(result.issueDate).toDateString()} />
             <Row label="Institution"       value={result.institutionId} />
+            <Row label="Signature"         value={<span className={signatureValid ? "text-success font-semibold" : "text-danger font-semibold"}>{signatureValid ? "Valid ✓" : "Invalid ✕"}</span>} />
             <Row label="Status"            value={<span className="text-success font-semibold">Active ✓</span>} />
           </div>
         )}

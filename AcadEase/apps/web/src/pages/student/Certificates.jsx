@@ -57,11 +57,10 @@ export default function StudentCertificates() {
   async function handleDownload(certId) {
     try {
       const res = await api.get(`/certificates/download/${certId}`);
-      const base = import.meta.env.VITE_API_BASE_URL?.replace("/api", "") || "http://localhost:5000";
+      const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "") || "http://localhost:5000";
       const pdfPath = res.data.pdfPath;
       if (!pdfPath) { showToast("PDF not available yet.", "error"); return; }
-      // pdfPath is like "storage/certificates/xxx.pdf" — serve via static route
-      window.open(`${base}/${pdfPath}`, "_blank");
+      window.open(`${base}/${pdfPath.replace(/^\/+/, "")}`, "_blank");
     } catch {
       showToast("Failed to get download link.", "error");
     }
@@ -111,7 +110,7 @@ export default function StudentCertificates() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge status={r.status} />
-                  {r.status === "approved" && r.certId && (
+                  {r.status === "approved" && r.pdfPath && (
                     <button
                       onClick={() => handleDownload(r.certId)}
                       className="w-8 h-8 rounded-pill bg-[#E8ECFF] text-signal flex items-center justify-center hover:bg-signal hover:text-white transition-colors"

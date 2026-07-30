@@ -13,6 +13,21 @@ function ensureStorageDir() {
   }
 }
 
+export function toPublicStoragePath(filePath) {
+  const normalized = path.normalize(filePath).replace(/\\/g, "/");
+  const storageRoot = path.resolve("storage").replace(/\\/g, "/");
+
+  if (normalized.startsWith(storageRoot + "/")) {
+    return normalized.replace(storageRoot + "/", "storage/");
+  }
+
+  if (normalized.startsWith("storage/")) {
+    return normalized;
+  }
+
+  return normalized;
+}
+
 // Anti-spoofing layer (PRD Section 5.4.3):
 // certId (UUIDv4) + HMAC-SHA256 signature over the immutable fields,
 // embedded in a QR code that resolves to the public /verify/:certId page.
@@ -96,7 +111,7 @@ export async function generateCertificatePdf(cert, { verifyBaseUrl }) {
     stream.on("error", reject);
   });
 
-  return { pdfPath: filePath, verifyUrl };
+  return { pdfPath: toPublicStoragePath(filePath), verifyUrl };
 }
 
 function certificateTitle(type) {

@@ -1,5 +1,5 @@
 import { CertificateRequest, Certificate, User, AttendanceRecord } from "../models/index.js";
-import { generateCertId, signCertificate, generateCertificatePdf, issueSignedDownloadToken } from "../utils/certificate.js";
+import { generateCertId, signCertificate, verifyCertificateSignature, generateCertificatePdf, issueSignedDownloadToken } from "../utils/certificate.js";
 import { pushNotification } from "../utils/notify.js";
 
 // POST /api/certificates/request
@@ -26,8 +26,18 @@ export async function requestCertificate(req, res) {
 export async function listCertificateRequests(req, res) {
   const { status } = req.query;
   const filter = status ? { status } : {};
-  const requests = await CertificateRequest.find(filter).sort({ createdAt: -1 });
-  res.json({ requests });
+  const requests = await CertificateRequest.find(filter)
+    .sort({ createdAt: -1 })
+    .populate("certificateId", "certId status revokedAt revokedReason");
+
+  const mapped = requests.map((request) => {
+    const obj = request.toObject();
+    obj.certificateCertId = obj.certificateId?.certId || null;
+    obj.certificateStatus = obj.certificateId?.status || null;
+    return obj;
+  });
+
+  res.json({ requests: mapped });
 }
 
 // GET /api/certificates/requests/student/:studentId
@@ -173,14 +183,19 @@ export async function verifyCertificate(req, res) {
     return res.status(404).json({ verified: false, message: "This certificate could not be verified. Contact the institution." });
   }
 
+  const signatureValid = verifyCertificateSignature(cert);
+  const isActive = cert.status === "active" && signatureValid;
+
   // Only the minimal, non-sensitive fields per PRD 5.4.4 — no marks, no attendance, no contact info.
   res.json({
-    verified: cert.status === "active",
+    verified: isActive,
     status: cert.status,
     studentName: cert.studentName,
     certificateType: cert.type,
     issueDate: cert.issuedAt,
     institutionId: cert.institutionId,
+    signatureValid,
+    message: isActive ? "Certificate verified successfully." : cert.status === "revoked" ? "This certificate has been revoked by the institution." : "This certificate could not be verified. The signature is invalid or the record is incomplete.",
   });
 }
 
@@ -190,6 +205,7 @@ export async function revokeCertificate(req, res) {
   const { reason } = req.body;
   const cert = await Certificate.findOne({ certId });
   if (!cert) return res.status(404).json({ error: "Certificate not found" });
+  if (cert.status === "revoked") return res.status(409).json({ error: "Certificate already revoked" });
 
   cert.status = "revoked";
   cert.revokedAt = new Date();

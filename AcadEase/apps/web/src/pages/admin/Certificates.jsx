@@ -13,6 +13,7 @@ export default function AdminCertificates() {
   const [loading, setLoading]         = useState(true);
   const [rejectReasons, setRejectReasons] = useState({});
   const [processing, setProcessing]   = useState(null);
+  const [revoking, setRevoking]       = useState(null);
   const { toast, showToast, clearToast } = useToast();
   const navigate = useNavigate();
 
@@ -46,6 +47,19 @@ export default function AdminCertificates() {
       showToast(err.response?.data?.error || "Rejection failed.", "error");
     } finally {
       setProcessing(null);
+    }
+  }
+
+  async function revoke(certId, id) {
+    setRevoking(id);
+    try {
+      await api.patch(`/certificates/${certId}/revoke`, { reason: rejectReasons[id] || "" });
+      showToast("Certificate revoked.", "success");
+      await load();
+    } catch (err) {
+      showToast(err.response?.data?.error || "Revocation failed.", "error");
+    } finally {
+      setRevoking(null);
     }
   }
 
@@ -135,7 +149,22 @@ export default function AdminCertificates() {
                         </div>
                         {r.rejectionReason && <p className="text-xs text-danger mt-1">Reason: {r.rejectionReason}</p>}
                       </div>
-                      <Badge status={r.status} />
+                      <div className="flex items-center gap-2">
+                        {r.certificateCertId && r.certificateStatus !== "revoked" && (
+                          <div className="flex items-center gap-2">
+                            <input
+                              placeholder="Revocation reason"
+                              value={rejectReasons[r._id] || ""}
+                              onChange={(e) => setRejectReasons((prev) => ({ ...prev, [r._id]: e.target.value }))}
+                              className="input min-w-[150px]"
+                            />
+                            <Button variant="destructive" size="sm" onClick={() => revoke(r.certificateCertId, r._id)} disabled={!!revoking}>
+                              {revoking === r._id ? "Revoking…" : "Revoke"}
+                            </Button>
+                          </div>
+                        )}
+                        <Badge status={r.certificateStatus === "revoked" ? "revoked" : r.status} />
+                      </div>
                     </div>
                   </Card>
                 ))}
