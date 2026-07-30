@@ -63,46 +63,84 @@ export async function generateCertificatePdf(cert, { verifyBaseUrl }) {
   const qrBuffer = Buffer.from(qrDataUrl.split(",")[1], "base64");
 
   const filePath = path.join(STORAGE_DIR, `${cert.certId}.pdf`);
-  const doc = new PDFDocument({ size: "A4", margin: 60 });
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
-  // Faint institution watermark (visual anti-forgery layer)
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const accent = "#1D4ED8";
+  const accentSoft = "#E8ECFF";
+  const ink = "#0F172A";
+  const muted = "#64748B";
+  const borderColor = "#C7D2FE";
+  const institutionName = process.env.INSTITUTION_NAME || "AcadEase";
+
+  // Outer border and header panel
+  doc.rect(28, 28, pageWidth - 56, pageHeight - 56).lineWidth(2).stroke(borderColor);
+  doc.rect(40, 40, pageWidth - 80, 110).fill(accentSoft);
+  doc.rect(40, 150, pageWidth - 80, 320).fill("#FFFFFF");
+  doc.rect(40, pageHeight - 88, pageWidth - 80, 48).fill(ink);
+
+  // Subtle institutional watermark
   doc.save();
-  doc.fillOpacity(0.06);
-  doc.fontSize(72).fillColor("#1D4ED8");
-  doc.text(process.env.INSTITUTION_NAME || "AcadEase", 40, 320, { align: "center", width: 520 });
+  doc.fillOpacity(0.08);
+  doc.fontSize(72).fillColor(accent);
+  doc.text(institutionName, 40, 220, { align: "center", width: 762 });
   doc.restore();
 
-  doc.fillOpacity(1).fillColor("#0F172A");
-  doc.fontSize(20).text(process.env.INSTITUTION_NAME || "Institution Name", { align: "center" });
-  doc.moveDown(0.3);
-  doc.fontSize(14).fillColor("#475569").text(certificateTitle(cert.type), { align: "center" });
-  doc.moveDown(2);
+  doc.fillOpacity(1);
+  doc.fillColor(accent).fontSize(12).font("Helvetica-Bold").text("OFFICIAL CERTIFICATE", 60, 62);
+  doc.fillColor(ink).fontSize(24).font("Helvetica-Bold").text(institutionName, 60, 82);
+  doc.fillColor(muted).fontSize(13).font("Helvetica").text(certificateTitle(cert.type), 60, 110);
 
-  doc.fontSize(11).fillColor("#0F172A");
-  const lines = [
+  // Main certificate body
+  doc.fillColor(muted).fontSize(16).font("Helvetica").text("This is to certify that", 70, 180);
+  doc.fillColor(ink).fontSize(28).font("Helvetica-Bold").text(cert.studentName, 70, 208);
+  doc.fontSize(12).fillColor(muted).text(`has successfully been recognized for ${String(cert.purpose).toLowerCase()} purposes.`, 70, 248);
+
+  doc.moveTo(70, 280).lineTo(pageWidth - 70, 280).stroke("#E2E8F0");
+
+  doc.fontSize(11).fillColor(ink);
+  const details = [
     ["Certificate ID", cert.certId],
-    ["Student Name", cert.studentName],
     ["Enrollment Number", cert.enrollmentNumber],
     ["Department", cert.department],
     ["Academic Year", cert.academicYear],
-    ["Purpose", cert.purpose],
     ["Issued On", new Date(cert.issuedAt).toDateString()],
   ];
-  lines.forEach(([label, value]) => {
-    doc.font("Helvetica-Bold").text(`${label}: `, { continued: true });
-    doc.font("Helvetica").text(String(value));
+
+  details.forEach(([label, value], index) => {
+    const y = 300 + index * 26;
+    doc.font("Helvetica-Bold").text(`${label}:`, 70, y, { continued: true });
+    doc.font("Helvetica").text(` ${String(value)}`);
   });
 
-  doc.moveDown(1.5);
-  doc.fontSize(9).fillColor("#94A3B8").text(
-    "This certificate is digitally issued and signed. Scan the QR code or visit the link below to verify authenticity.",
-    { width: 520 }
-  );
-  doc.fontSize(9).fillColor("#1D4ED8").text(verifyUrl, { width: 520 });
+  // Decorative seal and signatures
+  doc.circle(pageWidth - 140, pageHeight - 190, 54).lineWidth(2).stroke(accent);
+  doc.circle(pageWidth - 140, pageHeight - 190, 42).lineWidth(1).stroke("#CBD5E1");
+  doc.fillColor(accent).fontSize(11).font("Helvetica-Bold").text("VALID", pageWidth - 160, pageHeight - 206, { align: "center", width: 40 });
+  doc.fillColor(accent).fontSize(11).font("Helvetica-Bold").text("CERTIFIED", pageWidth - 160, pageHeight - 188, { align: "center", width: 40 });
 
-  doc.image(qrBuffer, doc.page.width - 180, doc.page.height - 220, { width: 120 });
+  doc.moveTo(70, pageHeight - 140).lineTo(260, pageHeight - 140).stroke(ink);
+  doc.fillColor(muted).fontSize(9).text("Authorized Signatory", 70, pageHeight - 122);
+  doc.fillColor(ink).fontSize(11).font("Helvetica-Bold").text(institutionName, 70, pageHeight - 104);
+
+  doc.moveTo(pageWidth - 280, pageHeight - 140).lineTo(pageWidth - 90, pageHeight - 140).stroke(ink);
+  doc.fillColor(muted).fontSize(9).text("Issue Date", pageWidth - 280, pageHeight - 122);
+  doc.fillColor(ink).fontSize(11).font("Helvetica-Bold").text(new Date(cert.issuedAt).toDateString(), pageWidth - 280, pageHeight - 104);
+
+  // QR and verification footer
+  doc.image(qrBuffer, pageWidth - 180, pageHeight - 220, { width: 100 });
+  doc.fillColor(muted).fontSize(9).text("Scan to verify authenticity", pageWidth - 190, pageHeight - 110);
+
+  doc.fontSize(8).fillColor("#94A3B8").text(
+    `Verified at ${verifyUrl}`,
+    70,
+    pageHeight - 84,
+    { width: pageWidth - 160 }
+  );
+  doc.fillColor("#FFFFFF").fontSize(10).text("Digitally signed and issued by AcadEase", 70, pageHeight - 58);
 
   doc.end();
 
