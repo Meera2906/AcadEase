@@ -17,24 +17,37 @@ import {
   Announcement,
   StudyMaterial,
 } from "../models/index.js";
+import { validateUploadedFile } from "../utils/fileSecurity.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const resumeDir = path.join(__dirname, "../../storage/resumes");
 if (!fs.existsSync(resumeDir)) fs.mkdirSync(resumeDir, { recursive: true });
 
+function isAllowedMime(file, allowedTypes) {
+  return allowedTypes.includes(file.mimetype);
+}
+
 const resumeStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resumeDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${req.user.userId}_resume${ext}`);
+    const safeBase = (req.user?.userId || "user").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${safeBase}_resume_${Date.now()}${ext}`);
   },
 });
 export const resumeUpload = multer({
   storage: resumeStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (req, file, cb) => {
-    const allowed = [".pdf", ".doc", ".docx"];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    const extAllowed = [".pdf", ".doc", ".docx"];
+    const extok = extAllowed.includes(path.extname(file.originalname).toLowerCase());
+    if (extok && isAllowedMime(file, allowed)) return cb(null, true);
+    cb(new Error("Only PDF, DOC, and DOCX resumes are allowed"));
   },
 });
 
@@ -44,9 +57,9 @@ if (!fs.existsSync(studyMaterialsDir)) fs.mkdirSync(studyMaterialsDir, { recursi
 const studyMaterialStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, studyMaterialsDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
-    cb(null, safeName);
+    const safeBase = (req.user?.userId || "user").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${safeBase}_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`);
   },
 });
 
@@ -54,8 +67,20 @@ export const studyMaterialUpload = multer({
   storage: studyMaterialStorage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg", ".png"];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    const allowedMime = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain",
+      "image/jpeg",
+      "image/png",
+    ];
+    const extAllowed = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg", ".png"];
+    const extok = extAllowed.includes(path.extname(file.originalname).toLowerCase());
+    if (extok && isAllowedMime(file, allowedMime)) return cb(null, true);
+    cb(new Error("Unsupported study material type"));
   },
 });
 
@@ -608,6 +633,13 @@ export async function getAdminDashboard(req, res) {
 // GET /api/admin/users/:userId  — full student profile for admin view
 export async function getStudentProfile(req, res) {
   const { userId } = req.params;
+  const isSelf = req.user.userId === userId;
+  const isPrivileged = ["admin", "superadmin"].includes(req.user.role);
+
+  if (!isSelf && !isPrivileged) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   const student = await User.findOne({ userId }).select("-passwordHash -totpSecret -refreshTokenHash");
   if (!student) return res.status(404).json({ error: "Student not found" });
 

@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
+import { requireAuth } from "./middleware/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,6 +20,7 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 
+app.disable("x-powered-by");
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
@@ -45,8 +47,9 @@ app.use("/api/auth", authLimiter);
 
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-// Serve generated PDFs, uploaded resumes, OD docs, and result PDFs as static files
-app.use("/storage", express.static(path.join(__dirname, "../storage")));
+// Sensitive files are no longer exposed anonymously. Authenticated users can still access them
+// via the secure file endpoint within the API, and direct /storage access is limited to logged-in users.
+app.use("/storage", requireAuth, express.static(path.join(__dirname, "../storage")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/attendance", attendanceRoutes);

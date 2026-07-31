@@ -43,14 +43,22 @@ export async function listCertificateRequests(req, res) {
 // GET /api/certificates/requests/student/:studentId
 export async function listStudentCertificateRequests(req, res) {
   const { studentId } = req.params;
+  const isSelf = req.user.userId === studentId;
+  const isPrivileged = ["admin", "superadmin", "faculty"].includes(req.user.role);
+
+  if (!isSelf && !isPrivileged) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   const requests = await CertificateRequest.find({ studentId })
     .sort({ createdAt: -1 })
-    .populate("certificateId", "certId pdfPath");
-  // Flatten certId onto each request for easy frontend use
+    .populate("certificateId", "certId pdfPath status");
+
   const mapped = requests.map((r) => {
     const obj = r.toObject();
     obj.certId = obj.certificateId?.certId || null;
     obj.pdfPath = obj.certificateId?.pdfPath || null;
+    obj.certificateStatus = obj.certificateId?.status || null;
     return obj;
   });
   res.json({ requests: mapped });
@@ -153,7 +161,12 @@ export async function downloadCertificate(req, res) {
   const cert = await Certificate.findOne({ certId });
   if (!cert) return res.status(404).json({ error: "Certificate not found" });
 
-  // Regenerate the signed link if expired (PRD 5.4.3 — no new approval needed)
+  const isOwner = req.user?.userId === cert.studentId;
+  const isPrivileged = ["admin", "superadmin"].includes(req.user?.role);
+  if (!isOwner && !isPrivileged) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   if (!cert.downloadUrlExpiresAt || cert.downloadUrlExpiresAt < new Date()) {
     const { token, expiresAt } = issueSignedDownloadToken();
     cert.downloadUrlToken = token;
@@ -168,8 +181,6 @@ export async function downloadCertificate(req, res) {
     certId: cert.certId,
     downloadToken: cert.downloadUrlToken,
     expiresAt: cert.downloadUrlExpiresAt,
-    // In production this would be a pre-signed object storage URL (S3/R2).
-    // For the MVP the file is served directly from local disk via pdfPath.
     pdfPath: cert.pdfPath,
   });
 }

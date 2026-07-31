@@ -123,6 +123,7 @@ async function issueTokens(res, user) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
+    path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -188,9 +189,7 @@ export async function forgotPassword(req, res) {
   user.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min, per PRD 5.1.2
   await user.save();
 
-  // TODO: send resetToken via Nodemailer. Logged here for local dev only.
-  console.log(`[auth] password reset token for ${email}: ${resetToken}`);
-
+  // TODO: send resetToken via Nodemailer in production; do not log it to stdout.
   return res.json({ message: "If that email exists, a reset link has been sent." });
 }
 
