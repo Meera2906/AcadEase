@@ -636,12 +636,20 @@ export async function getStudentProfile(req, res) {
   const isSelf = req.user.userId === userId;
   const isPrivileged = ["admin", "superadmin"].includes(req.user.role);
 
-  if (!isSelf && !isPrivileged) {
+  if (!isSelf && !isPrivileged && req.user.role !== "faculty") {
     return res.status(403).json({ error: "Forbidden" });
   }
 
   const student = await User.findOne({ userId }).select("-passwordHash -totpSecret -refreshTokenHash");
   if (!student) return res.status(404).json({ error: "Student not found" });
+
+  if (req.user.role === "faculty" && student.departmentId !== req.user.departmentId) {
+    return res.status(403).json({ error: "Forbidden: faculty can only access students in their department" });
+  }
+
+  if (req.user.role === "faculty" && student.institutionId !== req.user.institutionId) {
+    return res.status(403).json({ error: "Forbidden: cross-institution access denied" });
+  }
 
   const records = await AttendanceRecord.find({ studentId: userId, status: { $ne: "holiday" } });
   const perCourse = {};

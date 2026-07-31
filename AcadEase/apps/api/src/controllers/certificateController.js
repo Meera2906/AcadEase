@@ -44,10 +44,17 @@ export async function listCertificateRequests(req, res) {
 export async function listStudentCertificateRequests(req, res) {
   const { studentId } = req.params;
   const isSelf = req.user.userId === studentId;
-  const isPrivileged = ["admin", "superadmin", "faculty"].includes(req.user.role);
+  const isPrivileged = ["admin", "superadmin"].includes(req.user.role);
 
   if (!isSelf && !isPrivileged) {
-    return res.status(403).json({ error: "Forbidden" });
+    if (req.user.role !== "faculty") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const student = await User.findOne({ userId: studentId }).select("departmentId institutionId");
+    if (!student || student.departmentId !== req.user.departmentId || student.institutionId !== req.user.institutionId) {
+      return res.status(403).json({ error: "Forbidden: faculty can only view students in their department" });
+    }
   }
 
   const requests = await CertificateRequest.find({ studentId })
@@ -164,7 +171,14 @@ export async function downloadCertificate(req, res) {
   const isOwner = req.user?.userId === cert.studentId;
   const isPrivileged = ["admin", "superadmin"].includes(req.user?.role);
   if (!isOwner && !isPrivileged) {
-    return res.status(403).json({ error: "Forbidden" });
+    if (req.user?.role !== "faculty") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const student = await User.findOne({ userId: cert.studentId }).select("departmentId institutionId");
+    if (!student || student.departmentId !== req.user.departmentId || student.institutionId !== req.user.institutionId) {
+      return res.status(403).json({ error: "Forbidden: faculty can only access certificates in their department" });
+    }
   }
 
   if (!cert.downloadUrlExpiresAt || cert.downloadUrlExpiresAt < new Date()) {

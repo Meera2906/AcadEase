@@ -38,6 +38,15 @@ app.use(
 );
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  const cookieToken = req.cookies?.csrfToken;
+  const headerToken = req.headers["x-csrf-token"];
+  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    return res.status(403).json({ error: "CSRF token missing or invalid" });
+  }
+  return next();
+});
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 // Basic brute-force guard on auth endpoints (PRD 5.1.2 lockout policy is the

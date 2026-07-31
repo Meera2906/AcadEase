@@ -22,6 +22,19 @@ api.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+
+  const method = (config.method || "get").toLowerCase();
+  if (["post", "put", "patch", "delete"].includes(method)) {
+    const csrfToken = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("csrfToken="))
+      ?.split("=")[1];
+
+    if (csrfToken) {
+      config.headers["X-CSRF-Token"] = csrfToken;
+    }
+  }
+
   return config;
 });
 

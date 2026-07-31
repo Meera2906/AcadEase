@@ -114,6 +114,7 @@ export async function setupTotp(req, res) {
 async function issueTokens(res, user) {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
+  const csrfToken = crypto.randomBytes(32).toString("hex");
 
   user.refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
   user.lastLogin = new Date();
@@ -121,6 +122,13 @@ async function issueTokens(res, user) {
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  res.cookie("csrfToken", csrfToken, {
+    httpOnly: false,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
@@ -159,6 +167,14 @@ export async function refresh(req, res) {
   }
 
   const accessToken = signAccessToken(user);
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+  res.cookie("csrfToken", csrfToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
   return res.json({ accessToken });
 }
 
@@ -174,6 +190,7 @@ export async function logout(req, res) {
     }
   }
   res.clearCookie("refreshToken");
+  res.clearCookie("csrfToken");
   return res.json({ message: "Logged out" });
 }
 
