@@ -92,8 +92,11 @@ export default function App() {
       <Route path="/admin/admissions/upload" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsUpload /></ProtectedRoute>} />
       <Route path="/admin/admissions/applicants" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsApplicants /></ProtectedRoute>} />
       <Route path="/admin/admissions/applicants/:applicantId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsApplicantDetail /></ProtectedRoute>} />
-      <Route path="/admin/verification" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationQueue /></ProtectedRoute>} />
-      <Route path="/admin/verification/:documentId" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationReview /></ProtectedRoute>} />
+      {/* Both stages of the review chain use the same two screens. Which
+          documents appear, and whether the decision buttons are live, is
+          decided by the server from the caller's role — not by the route. */}
+      <Route path="/admin/verification" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><VerificationQueue /></ProtectedRoute>} />
+      <Route path="/admin/verification/:documentId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><VerificationReview /></ProtectedRoute>} />
 
       {/* University ↔ TNTEU governance requests */}
       <Route path="/admin/university-requests" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><UniversityRequests /></ProtectedRoute>} />

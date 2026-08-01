@@ -336,7 +336,7 @@ export async function logoutApplicant(req, res) {
 
 async function buildApplicationView(applicant) {
   const documents = await DocumentSubmission.find({ applicantId: applicant.applicantId })
-    .select("documentType status flags flagCount rejectionReason qrCheck qualityWarnings qualityMetrics typeCheck verificationGuidance originalName size mimeType createdAt verifiedAt extractedFields")
+    .select("documentType status reviewStage collegeReview tnteuReview flags flagCount rejectionReason qrCheck qualityWarnings qualityMetrics typeCheck verificationGuidance originalName size mimeType createdAt verifiedAt extractedFields")
     .sort({ createdAt: 1 })
     .lean();
 
@@ -595,8 +595,16 @@ export async function uploadMyDocument(req, res) {
     flags: allFlags,
     flagDetails: flagDetailsWithQr,
     flagCount: allFlags.length,
-    // Held back from TNTEU's queue until the applicant actually submits.
+    // Held back from the review queues until the applicant actually submits.
     queued: applicant.stage !== "draft",
+    // Every upload — including a replacement — enters at the head of the
+    // two-stage chain: the university reviews it first, then TNTEU.
+    reviewStage: "college",
+    collegeReview: { decision: "pending", by: null, byName: null, at: null, reason: null, mode: null },
+    tnteuReview: { decision: "pending", by: null, byName: null, at: null, reason: null, mode: null },
+    approvals: [],
+    integrityCheckedAt: null,
+    integrityOk: null,
     status: "pending",
     verifiedBy: null,
     verifiedAt: null,

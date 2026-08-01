@@ -188,6 +188,9 @@ export function deriveApplicantStatus(program, documents = []) {
       documentType: type,
       label: DOCUMENT_LABELS[type] || type,
       status: doc ? doc.status : "missing",
+      // Where in the two-stage chain this document currently sits. A pending
+      // document at the "tnteu" stage has already cleared its university.
+      reviewStage: doc ? doc.reviewStage || "college" : null,
       documentId: doc ? String(doc._id) : null,
       flags: doc ? doc.flags || [] : [],
     };
@@ -195,7 +198,11 @@ export function deriveApplicantStatus(program, documents = []) {
 
   const verifiedCount = checklist.filter((item) => item.status === "verified").length;
   const rejected = checklist.filter((item) => item.status === "rejected");
-  const anyReviewed = documents.some((doc) => doc.status !== "pending");
+  // A document the university has approved and forwarded is under review even
+  // though its overall status is still pending — TNTEU has not signed yet.
+  const anyReviewed = documents.some(
+    (doc) => doc.status !== "pending" || (doc.reviewStage && doc.reviewStage !== "college")
+  );
 
   let status;
   if (rejected.length) status = "rejected";

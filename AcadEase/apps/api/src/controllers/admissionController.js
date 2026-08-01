@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import { fileURLToPath } from "url";
 import {
   Applicant,
@@ -32,6 +33,16 @@ import { evaluateEligibility } from "../utils/eligibility.js";
 import { checkClaimedType, verificationGuidanceFor } from "../utils/tnDocuments.js";
 import { extractPdfText } from "../utils/pdfText.js";
 import { pushNotification } from "../utils/notify.js";
+import {
+  assessDocument,
+  severityCountPipeline,
+  verifyStoredIntegrity,
+  stageForRole,
+  nextStageAfter,
+  GATE_FLAG_LABELS,
+  STAGE_LABELS,
+} from "../utils/reviewGate.js";
+import { signApproval, lastSignature, verifyChain, keyIdForActor } from "../utils/approvalChain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -480,6 +491,15 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     flags,
     flagDetails,
     flagCount: flags.length,
+    // A replacement file starts the two-stage chain over from the beginning.
+    // Carrying a previous university approval across to a different file would
+    // mean TNTEU counter-signing something nobody approved.
+    reviewStage: "college",
+    collegeReview: { decision: "pending", by: null, byName: null, at: null, reason: null, mode: null },
+    tnteuReview: { decision: "pending", by: null, byName: null, at: null, reason: null, mode: null },
+    approvals: [],
+    integrityCheckedAt: null,
+    integrityOk: null,
     status: "pending",
     verifiedBy: null,
     verifiedAt: null,
@@ -651,7 +671,9 @@ async function refreshApplicantStatus(applicantId, reviewer = null) {
   const applicant = await Applicant.findOne({ applicantId });
   if (!applicant) return null;
 
-  const documents = await DocumentSubmission.find({ applicantId }).select("documentType status flags _id").lean();
+  const documents = await DocumentSubmission.find({ applicantId })
+    .select("documentType status reviewStage flags _id")
+    .lean();
   const derived = deriveApplicantStatus(applicant.program, documents);
 
   const changed = applicant.status !== derived.status;
@@ -756,14 +778,51 @@ export async function getApplicant(req, res) {
 }
 
 // ---------------------------------------------------------------------------
-// TNTEU: the verification queue
+// The two-stage verification queue
+//
+// A document is approved twice, by two institutions, in a fixed order:
+//
+//   applicant submits
+//        ↓  reviewStage = "college"
+//   the submitting university approves (bulk for clean ones, individually for
+//   anything flagged) or rejects
+//        ↓  reviewStage = "tnteu"
+//   TNTEU gives final approval (bulk / individual) or rejects
+//        ↓  reviewStage = "complete", status = verified | rejected
+//
+// The stage is stored on the document, so neither party can act out of turn
+// and TNTEU can never be handed something the university has not stood behind.
+// Each decision is counter-signed with the deciding institution's private key.
 // ---------------------------------------------------------------------------
+
+// Documents written before the two-stage chain existed carry no reviewStage.
+// They belong at the head of the chain, not nowhere.
+function stageFilter(stage) {
+  if (stage !== "college") return { reviewStage: stage };
+  return { $or: [{ reviewStage: "college" }, { reviewStage: { $exists: false } }, { reviewStage: null }] };
+}
+
+function currentStage(doc) {
+  return doc.reviewStage || "college";
+}
+
+function requireReviewStage(req) {
+  const stage = stageForRole(req.user?.role);
+  if (!stage) throw new ScopeError("Your role does not take part in document verification");
+  return stage;
+}
 
 // GET /api/admissions/queue
 export async function getVerificationQueue(req, res) {
   const { page, limit, skip } = pagination(req);
+  const stage = requireReviewStage(req);
+
   // `queued` keeps drafts out: an applicant still uploading is not review work.
-  const filter = scoped(req, { status: req.query.status || "pending", queued: true });
+  const filter = scoped(req, {
+    status: req.query.status || "pending",
+    queued: true,
+    ...stageFilter(stage),
+  });
 
   if (req.query.documentType) filter.documentType = String(req.query.documentType);
   if (req.query.flagged === "true") filter.flagCount = { $gt: 0 };
@@ -771,10 +830,19 @@ export async function getVerificationQueue(req, res) {
 
   // Flagged documents first, then oldest waiting — this is the order a
   // reviewer should work in, and it comes straight off the index.
-  const [documents, total] = await Promise.all([
+  const [documents, total, severityCounts] = await Promise.all([
     DocumentSubmission.find(filter).sort({ flagCount: -1, createdAt: 1 }).skip(skip).limit(limit).lean(),
     DocumentSubmission.countDocuments(filter),
+    // Counted across the whole stage, not just this page, so the reviewer knows
+    // how much of the backlog is sweepable before they start. Aggregated in the
+    // database — the backlog is never loaded to be counted.
+    DocumentSubmission.aggregate([{ $match: filter }, ...severityCountPipeline()]),
   ]);
+
+  const summary = { clean: 0, attention: 0, suspect: 0 };
+  severityCounts.forEach((item) => {
+    summary[item._id] = item.count;
+  });
 
   const applicantIds = [...new Set(documents.map((doc) => doc.applicantId))];
   const collegeIds = [...new Set(documents.map((doc) => doc.collegeId))];
@@ -786,21 +854,35 @@ export async function getVerificationQueue(req, res) {
   const collegeById = new Map(colleges.map((item) => [item.collegeId, item.name]));
 
   res.json({
-    documents: documents.map((doc) => ({
-      _id: doc._id,
-      applicantId: doc.applicantId,
-      applicantName: applicantById.get(doc.applicantId)?.name || null,
-      program: applicantById.get(doc.applicantId)?.program || null,
-      collegeId: doc.collegeId,
-      collegeName: collegeById.get(doc.collegeId) || doc.collegeId,
-      documentType: doc.documentType,
-      label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
-      flags: doc.flags,
-      flagCount: doc.flagCount,
-      status: doc.status,
-      submittedAt: doc.createdAt,
-      waitingHours: Math.round((Date.now() - new Date(doc.createdAt).getTime()) / 36e5),
-    })),
+    stage,
+    stageLabel: STAGE_LABELS[stage],
+    documents: documents.map((doc) => {
+      const assessment = assessDocument(doc);
+      return {
+        _id: doc._id,
+        applicantId: doc.applicantId,
+        applicantName: applicantById.get(doc.applicantId)?.name || null,
+        program: applicantById.get(doc.applicantId)?.program || null,
+        collegeId: doc.collegeId,
+        collegeName: collegeById.get(doc.collegeId) || doc.collegeId,
+        documentType: doc.documentType,
+        label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
+        flags: doc.flags,
+        flagCount: doc.flagCount,
+        status: doc.status,
+        reviewStage: currentStage(doc),
+        // What the university already decided, shown on TNTEU's queue so the
+        // final approver can see whose word they are counter-signing.
+        collegeReview: stage === "tnteu" ? doc.collegeReview : undefined,
+        severity: assessment.severity,
+        bulkEligible: assessment.bulkEligible,
+        blockers: assessment.blockers,
+        submittedAt: doc.createdAt,
+        waitingHours: Math.round((Date.now() - new Date(doc.createdAt).getTime()) / 36e5),
+      };
+    }),
+    summary,
+    flagLabels: GATE_FLAG_LABELS,
     page,
     limit,
     total,
@@ -833,14 +915,27 @@ export async function getDocument(req, res) {
     }
   }
 
+  const stage = stageForRole(req.user.role);
+  const assessment = assessDocument(doc);
+
   res.json({
     document: {
       ...doc,
+      reviewStage: currentStage(doc),
       label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
       expectedFields: expectedFieldsFor(doc.documentType),
       // The wrapped-key list, in words — who can actually open this file.
       readableBy: describeAccess(doc.encryption),
     },
+    // Whose desk it is on, and whether this viewer is the one holding it.
+    stage: currentStage(doc),
+    stageLabel: STAGE_LABELS[currentStage(doc)],
+    viewerStage: stage,
+    canDecide: doc.status === "pending" && doc.queued && currentStage(doc) === stage,
+    assessment,
+    // Re-verified on every read, so a decision that was edited in the database
+    // shows up as broken here rather than being taken on trust.
+    approvalChain: verifyChain(doc.approvals || [], "DocumentSubmission", String(doc._id)),
     applicant,
     collegeName: college?.name || doc.collegeId,
     checklist: derived.checklist,
@@ -848,7 +943,7 @@ export async function getDocument(req, res) {
     requiredCount: derived.requiredCount,
     duplicateOf,
     eligibility: applicant ? evaluateEligibility(applicant) : null,
-    flagLabels: { ...FLAG_LABELS, ...QR_FLAG_LABELS },
+    flagLabels: { ...FLAG_LABELS, ...QR_FLAG_LABELS, ...GATE_FLAG_LABELS },
   });
 }
 
@@ -892,56 +987,286 @@ export async function streamDocumentFile(req, res) {
   res.send(plaintext);
 }
 
-// PATCH /api/admissions/documents/:id/verify
-export async function verifyDocument(req, res) {
-  const doc = await DocumentSubmission.findById(req.params.id);
-  if (!doc) return res.status(404).json({ error: "Document not found" });
-  if (doc.status === "verified") return res.status(409).json({ error: "Document is already verified" });
+// ---------------------------------------------------------------------------
+// One decision, applied identically whether it came from a single review screen
+// or from a bulk sweep of two hundred documents.
+//
+// `mode: "bulk"` is the only difference, and it only ever *removes* permission:
+// a bulk sweep may not touch anything the gate has not classified as clean.
+// Every other check — stage, scope, integrity, late duplicates — runs the same
+// in both modes, so there is no path that approves a document with fewer checks
+// than the careful path applies.
+// ---------------------------------------------------------------------------
 
-  // The reviewer's confirmed/corrected fields replace the assistive pre-fill.
-  // Verification is only ever recorded against what a human confirmed.
-  const confirmed = req.body?.extractedFields;
-  if (confirmed && typeof confirmed === "object" && !Array.isArray(confirmed)) {
+const REJECTION_MIN_LENGTH = 5;
+
+function skip(doc, reasons) {
+  return {
+    outcome: "skipped",
+    documentId: String(doc._id),
+    applicantId: doc.applicantId,
+    collegeId: doc.collegeId,
+    documentType: doc.documentType,
+    label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
+    reasons: Array.isArray(reasons) ? reasons : [reasons],
+  };
+}
+
+async function raiseFlag(doc, flag, detail) {
+  if (!doc.flags.includes(flag)) {
+    doc.flags.push(flag);
+    doc.flagCount = doc.flags.length;
+  }
+  doc.flagDetails = { ...(doc.flagDetails || {}), [flag]: detail };
+  doc.markModified("flagDetails");
+  await doc.save();
+}
+
+async function applyDecision({ req, doc, stage, decision, reason, mode, confirmedFields }) {
+  if (!assertCanTouch(req, doc)) return skip(doc, "This document belongs to another university");
+  if (!doc.queued) return skip(doc, "The applicant has not submitted this application yet");
+  if (doc.status !== "pending") return skip(doc, `Already ${doc.status}`);
+
+  const at = currentStage(doc);
+  if (at !== stage) {
+    return skip(doc, at === "tnteu"
+      ? "Already approved by the university — it is with TNTEU now"
+      : `This document is at the ${STAGE_LABELS[at]} stage`);
+  }
+
+  if (decision === "approve") {
+    const assessment = assessDocument(doc);
+
+    // The bulk gate. A flagged document is never swept through — the reviewer
+    // has to open it, look at the file, and decide with their name on it.
+    if (mode === "bulk" && !assessment.bulkEligible) {
+      return skip(doc, assessment.blockers.map((item) => item.label));
+    }
+
+    // Re-hash the file on disk right now. Everything else judged this document
+    // as it was at upload; this is the only check that judges it as it is at
+    // the moment somebody puts their signature on it.
+    const integrity = await verifyStoredIntegrity(doc, {
+      role: req.user.role,
+      collegeId: ownCollegeId(req),
+      secureRoot: SECURE_ROOT,
+    });
+    doc.integrityCheckedAt = new Date();
+    doc.integrityOk = integrity.ok;
+    if (!integrity.ok) {
+      await raiseFlag(doc, "integrity_failed", { detail: integrity.reason, checkedAt: new Date() });
+      return skip(doc, [integrity.reason, "Approval refused — this file cannot be confirmed to be the one that was uploaded."]);
+    }
+
+    // A duplicate can appear *after* upload: applicant B submits the same file
+    // an hour after applicant A. A's document was clean when it arrived and
+    // would otherwise be swept through untouched.
+    const alreadyKnown = doc.flags.includes("duplicate_hash");
+    const twin = await DocumentSubmission.findOne({
+      fileHash: doc.fileHash,
+      applicantId: { $ne: doc.applicantId },
+      _id: { $ne: doc._id },
+    })
+      .select("applicantId collegeId documentType createdAt")
+      .lean();
+    if (twin) {
+      await raiseFlag(doc, "duplicate_hash", {
+        applicantId: twin.applicantId,
+        collegeId: twin.collegeId,
+        documentType: twin.documentType,
+        submittedAt: twin.createdAt,
+      });
+      // In bulk, always refused. In individual review it is refused only the
+      // first time — once the flag is on the record the reviewer sees both
+      // copies side by side on the review screen and can say which is genuine.
+      // Refusing forever would leave the honest applicant's certificate
+      // unapprovable because somebody else copied it.
+      if (mode === "bulk" || !alreadyKnown) {
+        return skip(doc, [
+          `The identical file was also submitted by ${twin.applicantId}`,
+          alreadyKnown
+            ? "Open both and approve the genuine one individually."
+            : "Reload this document — the duplicate was found after you opened it — then decide which copy is genuine.",
+        ]);
+      }
+    }
+  }
+
+  // A reviewer's confirmed/corrected fields replace the assistive pre-fill.
+  if (confirmedFields && typeof confirmedFields === "object" && !Array.isArray(confirmedFields)) {
     const clean = {};
-    Object.entries(confirmed)
+    Object.entries(confirmedFields)
       .slice(0, 30)
       .forEach(([key, value]) => {
         if (/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(key)) clean[key] = String(value ?? "").slice(0, 200);
       });
     doc.extractedFields = clean;
+    doc.fieldsConfirmedBy = req.user.userId;
   }
 
-  doc.status = "verified";
-  doc.verifiedBy = req.user.userId;
-  doc.verifiedAt = new Date();
-  doc.rejectionReason = null;
-  doc.fieldsConfirmedBy = req.user.userId;
+  const remarks = String(reason || "").slice(0, 500);
+  const record = {
+    decision: decision === "approve" ? "approved" : "rejected",
+    by: req.user.userId,
+    byName: req.user.name || null,
+    at: new Date(),
+    reason: remarks || null,
+    mode,
+  };
+
+  // Counter-sign with the deciding institution's own private key. Only the key
+  // holder can produce this; anyone at all can check it.
+  const keyId = keyIdForActor({ role: req.user.role, collegeId: ownCollegeId(req) });
+  if (!keyId) return skip(doc, "Your account is not linked to an institutional signing key");
+
+  doc.approvals.push(
+    signApproval({
+      subjectType: "DocumentSubmission",
+      subjectId: String(doc._id),
+      stage: stage === "college" ? "university_review" : "tnteu_review",
+      decision: record.decision,
+      actorId: req.user.userId,
+      actorName: req.user.name || null,
+      actorRole: req.user.role,
+      keyId,
+      remarks,
+      decidedAt: record.at,
+      previousSignature: lastSignature(doc.approvals),
+    })
+  );
+  doc.markModified("approvals");
+
+  if (stage === "college") doc.collegeReview = record;
+  else doc.tnteuReview = record;
+
+  if (decision === "reject") {
+    doc.reviewStage = "complete";
+    doc.status = "rejected";
+    doc.rejectionReason = `${STAGE_LABELS[stage]}: ${remarks}`;
+    doc.verifiedBy = req.user.userId;
+    doc.verifiedAt = record.at;
+  } else if (stage === "college") {
+    // A university approval forwards the document. It does NOT verify it —
+    // only TNTEU's counter-signature can do that.
+    doc.reviewStage = "tnteu";
+    doc.status = "pending";
+  } else {
+    doc.reviewStage = "complete";
+    doc.status = "verified";
+    doc.verifiedBy = req.user.userId;
+    doc.verifiedAt = record.at;
+    doc.rejectionReason = null;
+  }
+
   await doc.save();
 
-  const refreshed = await refreshApplicantStatus(doc.applicantId, req.user.userId);
+  return {
+    outcome: decision === "approve" ? (stage === "college" ? "forwarded" : "verified") : "rejected",
+    documentId: String(doc._id),
+    applicantId: doc.applicantId,
+    collegeId: doc.collegeId,
+    documentType: doc.documentType,
+    label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
+    reasons: [],
+  };
+}
 
-  await audit(req, "admission_document_verified", {
+// Notifications and applicant-status refresh, run once per batch rather than
+// once per document.
+async function settleAfterDecisions({ req, stage, results, decision }) {
+  const succeeded = results.filter((item) => item.outcome !== "skipped");
+  const applicantIds = [...new Set(succeeded.map((item) => item.applicantId))];
+
+  const statuses = [];
+  for (const applicantId of applicantIds) {
+    const refreshed = await refreshApplicantStatus(applicantId, req.user.userId);
+    if (refreshed) statuses.push(refreshed);
+  }
+
+  if (!succeeded.length) return statuses;
+
+  if (decision === "approve" && stage === "college") {
+    notifyTnteuAdmins({
+      title: "Documents awaiting TNTEU approval",
+      message: `${succeeded.length} document(s) approved by ${ownCollegeId(req)} and forwarded for final approval.`,
+      linkTo: "/admin/verification",
+    });
+  }
+
+  if (decision === "reject") {
+    const rejectedBy = stage === "college" ? "your university" : "TNTEU";
+    // One notification per affected university, not one per document.
+    const byCollege = new Map();
+    succeeded.forEach((item) => {
+      if (!byCollege.has(item.collegeId)) byCollege.set(item.collegeId, []);
+      byCollege.get(item.collegeId).push(item);
+    });
+    byCollege.forEach((items, collegeId) =>
+      notifyCollegeAdmins(collegeId, {
+        title: `Document${items.length > 1 ? "s" : ""} rejected by ${rejectedBy}`,
+        message:
+          items
+            .slice(0, 5)
+            .map((item) => `${item.label} — ${item.applicantId}`)
+            .join("; ") + (items.length > 5 ? ` and ${items.length - 5} more` : ""),
+        linkTo: "/admin/admissions/applicants",
+      })
+    );
+  }
+
+  statuses
+    .filter((item) => item.changed && item.applicant.status === "verified")
+    .forEach((item) =>
+      notifyCollegeAdmins(item.applicant.collegeId, {
+        title: "Applicant fully verified",
+        message: `All required documents for ${item.applicant.name} (${item.applicant.applicantId}) are verified by TNTEU. You can now enrol them.`,
+        linkTo: `/admin/admissions/applicants/${item.applicant.applicantId}`,
+      })
+    );
+
+  return statuses;
+}
+
+// PATCH /api/admissions/documents/:id/verify
+export async function verifyDocument(req, res) {
+  const stage = requireReviewStage(req);
+  const doc = await DocumentSubmission.findById(req.params.id);
+  if (!doc || !assertCanTouch(req, doc)) return res.status(404).json({ error: "Document not found" });
+
+  const result = await applyDecision({
+    req,
+    doc,
+    stage,
+    decision: "approve",
+    mode: "individual",
+    confirmedFields: req.body?.extractedFields,
+  });
+
+  if (result.outcome === "skipped") {
+    return res.status(409).json({ error: result.reasons[0], reasons: result.reasons });
+  }
+
+  const statuses = await settleAfterDecisions({ req, stage, results: [result], decision: "approve" });
+  const refreshed = statuses[0];
+
+  await audit(req, stage === "college" ? "admission_document_college_approved" : "admission_document_verified", {
     targetType: "DocumentSubmission",
     targetId: doc._id,
     collegeId: doc.collegeId,
     metadata: {
       applicantId: doc.applicantId,
       documentType: doc.documentType,
+      stage,
+      mode: "individual",
       flagsAtReview: doc.flags,
       applicantStatus: refreshed?.applicant?.status,
     },
   });
 
-  if (refreshed?.changed && refreshed.applicant.status === "verified") {
-    notifyCollegeAdmins(doc.collegeId, {
-      title: "Applicant fully verified",
-      message: `All required documents for ${refreshed.applicant.name} (${doc.applicantId}) are verified. You can now enrol them.`,
-      linkTo: `/admin/admissions/applicants/${doc.applicantId}`,
-    });
-  }
-
   res.json({
-    message: "Document verified",
+    message: stage === "college" ? "Approved and forwarded to TNTEU" : "Document verified",
+    outcome: result.outcome,
+    reviewStage: doc.reviewStage,
     document: doc,
     applicantStatus: refreshed?.applicant?.status,
     verifiedCount: refreshed?.derived?.verifiedCount,
@@ -951,21 +1276,21 @@ export async function verifyDocument(req, res) {
 
 // PATCH /api/admissions/documents/:id/reject
 export async function rejectDocument(req, res) {
+  const stage = requireReviewStage(req);
   const reason = String(req.body?.reason || "").trim();
-  if (reason.length < 5) {
+  if (reason.length < REJECTION_MIN_LENGTH) {
     return res.status(400).json({ error: "A rejection reason of at least 5 characters is required" });
   }
 
   const doc = await DocumentSubmission.findById(req.params.id);
-  if (!doc) return res.status(404).json({ error: "Document not found" });
+  if (!doc || !assertCanTouch(req, doc)) return res.status(404).json({ error: "Document not found" });
 
-  doc.status = "rejected";
-  doc.verifiedBy = req.user.userId;
-  doc.verifiedAt = new Date();
-  doc.rejectionReason = reason.slice(0, 500);
-  await doc.save();
+  const result = await applyDecision({ req, doc, stage, decision: "reject", reason, mode: "individual" });
+  if (result.outcome === "skipped") {
+    return res.status(409).json({ error: result.reasons[0], reasons: result.reasons });
+  }
 
-  const refreshed = await refreshApplicantStatus(doc.applicantId, req.user.userId);
+  const statuses = await settleAfterDecisions({ req, stage, results: [result], decision: "reject" });
 
   await audit(req, "admission_document_rejected", {
     targetType: "DocumentSubmission",
@@ -974,25 +1299,119 @@ export async function rejectDocument(req, res) {
     metadata: {
       applicantId: doc.applicantId,
       documentType: doc.documentType,
+      stage,
+      mode: "individual",
       reason: doc.rejectionReason,
       flagsAtReview: doc.flags,
     },
   });
 
-  notifyCollegeAdmins(doc.collegeId, {
-    title: "Document rejected by TNTEU",
-    message: `${DOCUMENT_LABELS[doc.documentType] || doc.documentType} for ${doc.applicantId} was rejected: ${doc.rejectionReason}`,
-    linkTo: `/admin/admissions/applicants/${doc.applicantId}`,
-  });
-
   res.json({
     message: "Document rejected",
     document: doc,
-    applicantStatus: refreshed?.applicant?.status,
+    applicantStatus: statuses[0]?.applicant?.status,
   });
 }
 
+// ---------------------------------------------------------------------------
+// Bulk approval / rejection
+// ---------------------------------------------------------------------------
+
+const MAX_BULK = 200;
+
+// POST /api/admissions/queue/bulk
+// body: { decision: "approve" | "reject", documentIds: [...], reason?, scope? }
+//
+// `scope: "all_eligible"` sweeps every clean document at the caller's stage
+// without the client having to enumerate them. It is still the same gate: the
+// server decides what is eligible, never the request.
+export async function bulkDecide(req, res) {
+  const stage = requireReviewStage(req);
+  const decision = req.body?.decision === "reject" ? "reject" : "approve";
+  const reason = String(req.body?.reason || "").trim();
+
+  if (decision === "reject" && reason.length < REJECTION_MIN_LENGTH) {
+    return res.status(400).json({ error: "A rejection reason of at least 5 characters is required" });
+  }
+
+  const base = scoped(req, { status: "pending", queued: true, ...stageFilter(stage) });
+
+  let documents;
+  if (req.body?.scope === "all_eligible") {
+    if (decision === "reject") {
+      return res.status(400).json({ error: "Rejections must name the documents being rejected" });
+    }
+    // Unflagged only — the gate re-checks each one anyway, this just avoids
+    // loading the whole backlog to throw most of it away.
+    documents = await DocumentSubmission.find({ ...base, flagCount: 0 }).limit(MAX_BULK);
+  } else {
+    const ids = Array.isArray(req.body?.documentIds) ? req.body.documentIds : [];
+    if (!ids.length) return res.status(400).json({ error: "Select at least one document" });
+    if (ids.length > MAX_BULK) {
+      return res.status(400).json({ error: `Up to ${MAX_BULK} documents can be decided at once` });
+    }
+    const valid = ids.filter((id) => mongoose.isValidObjectId(id));
+    documents = await DocumentSubmission.find({ _id: { $in: valid } });
+  }
+
+  const results = [];
+  for (const doc of documents) {
+    try {
+      results.push(await applyDecision({ req, doc, stage, decision, reason, mode: "bulk" }));
+    } catch (err) {
+      results.push(skip(doc, err.message || "This document could not be decided"));
+    }
+  }
+
+  const statuses = await settleAfterDecisions({ req, stage, results, decision });
+
+  const decided = results.filter((item) => item.outcome !== "skipped");
+  const skipped = results.filter((item) => item.outcome === "skipped");
+
+  await audit(req, decision === "approve" ? "admission_bulk_approved" : "admission_bulk_rejected", {
+    targetType: "DocumentSubmission",
+    targetId: null,
+    metadata: {
+      stage,
+      requested: documents.length,
+      decided: decided.length,
+      skipped: skipped.length,
+      documentIds: decided.map((item) => item.documentId).slice(0, 200),
+      reason: decision === "reject" ? reason : undefined,
+    },
+  });
+
+  res.json({
+    stage,
+    decision,
+    requested: documents.length,
+    decidedCount: decided.length,
+    skippedCount: skipped.length,
+    decided,
+    skipped,
+    applicantsNowVerified: statuses
+      .filter((item) => item.applicant.status === "verified")
+      .map((item) => ({ applicantId: item.applicant.applicantId, name: item.applicant.name })),
+    message:
+      decision === "approve"
+        ? `${decided.length} document(s) ${stage === "college" ? "approved and forwarded to TNTEU" : "verified"}` +
+          (skipped.length ? `, ${skipped.length} held back for individual review.` : ".")
+        : `${decided.length} document(s) rejected` + (skipped.length ? `, ${skipped.length} skipped.` : "."),
+  });
+}
+
+function notifyTnteuAdmins(payload) {
+  User.find({ role: "tnteu_admin" })
+    .select("userId")
+    .lean()
+    .then((admins) =>
+      Promise.all(admins.map((admin) => pushNotification({ userId: admin.userId, type: "admission", ...payload }).catch(() => {})))
+    )
+    .catch(() => {});
+}
+
 function notifyCollegeAdmins(collegeId, payload) {
+  if (!collegeId) return;
   // Fire and forget — a notification failure must not roll back a review.
   User.find({ collegeId, role: { $in: ["college_admin", "college_coordinator"] } })
     .select("userId")
@@ -1016,8 +1435,14 @@ export async function getAdmissionStats(req, res) {
   const base = scoped(req);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [byStatus, perCollege, throughput, timing, applicantsByStatus, colleges] = await Promise.all([
+  const [byStatus, byStage, perCollege, throughput, timing, applicantsByStatus, colleges] = await Promise.all([
     DocumentSubmission.aggregate([{ $match: { ...base, queued: true } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+
+    // Where the pending backlog is sitting: with the universities, or with TNTEU.
+    DocumentSubmission.aggregate([
+      { $match: { ...base, status: "pending", queued: true } },
+      { $group: { _id: { $ifNull: ["$reviewStage", "college"] }, count: { $sum: 1 } } },
+    ]),
 
     DocumentSubmission.aggregate([
       { $match: { ...base, status: "pending", queued: true } },
@@ -1052,12 +1477,15 @@ export async function getAdmissionStats(req, res) {
   const collegeNames = new Map(colleges.map((college) => [college.collegeId, college.name]));
   const documentStatus = Object.fromEntries(byStatus.map((item) => [item._id, item.count]));
   const applicantStatus = Object.fromEntries(applicantsByStatus.map((item) => [item._id, item.count]));
+  const stageCounts = Object.fromEntries(byStage.map((item) => [item._id, item.count]));
 
   res.json({
     documents: {
       pending: documentStatus.pending || 0,
       verified: documentStatus.verified || 0,
       rejected: documentStatus.rejected || 0,
+      awaitingCollege: stageCounts.college || 0,
+      awaitingTnteu: stageCounts.tnteu || 0,
     },
     applicants: {
       submitted: applicantStatus.submitted || 0,
@@ -1195,7 +1623,7 @@ export async function getMyApplication(req, res) {
   if (!applicant) return res.json({ applicant: null, checklist: [], documents: [] });
 
   const documents = await DocumentSubmission.find({ applicantId: applicant.applicantId })
-    .select("documentType status rejectionReason verifiedAt createdAt")
+    .select("documentType status reviewStage rejectionReason verifiedAt createdAt")
     .lean();
   const derived = deriveApplicantStatus(applicant.program, documents);
   const college = await College.findOne({ collegeId: applicant.collegeId }).select("name").lean();

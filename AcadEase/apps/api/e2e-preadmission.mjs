@@ -287,17 +287,23 @@ async function main() {
   // ── 8. drafts stay out of the queue ───────────────────────────────────────
   console.log("\n8. Drafts do not consume reviewer attention");
   const tnteu = signAccessToken({ userId: "SUP_001", role: "tnteu_admin", collegeId: null });
-  const before = await call("GET", "/api/admissions/queue", { token: tnteu });
-  check("a draft's documents are not in TNTEU's queue",
+  // A submitted application enters the FIRST stage of the chain: the applicant's
+  // own university reviews it before TNTEU ever sees it.
+  const ownUni = signAccessToken({ userId: "ADM_CSE_001", role: "college_admin", collegeId: COLLEGE });
+  const before = await call("GET", "/api/admissions/queue", { token: ownUni });
+  check("a draft's documents are not in the university's queue",
     !before.body.documents.some((d) => d.applicantId === applicantId),
     `${before.body.total} in queue`);
 
   const submitted = await call("POST", "/api/applicant/submit", { token });
   check("submission succeeds", submitted.status === 200, JSON.stringify(submitted.body).slice(0, 140));
 
-  const after = await call("GET", "/api/admissions/queue?limit=100", { token: tnteu });
+  const after = await call("GET", "/api/admissions/queue?limit=100", { token: ownUni });
   const mine = after.body.documents.filter((d) => d.applicantId === applicantId);
-  check("all 5 documents enter the queue on submit", mine.length === 5, `got ${mine.length}`);
+  check("all 5 documents enter the university's queue on submit", mine.length === 5, `got ${mine.length}`);
+  const notYetTnteu = await call("GET", "/api/admissions/queue?limit=100", { token: tnteu });
+  check("TNTEU sees none of them until the university approves",
+    !notYetTnteu.body.documents.some((d) => d.applicantId === applicantId));
   // Clean documents must stay unflagged so the queue's flagged-first ordering
   // keeps pointing at the ones that actually need attention.
   check("a clean submission adds no noise to the queue", mine.every((d) => d.flagCount === 0),
@@ -313,7 +319,6 @@ async function main() {
   const tnteuBody = Buffer.from(await asTnteu.arrayBuffer());
   check("TNTEU can decrypt and read it", asTnteu.status === 200 && tnteuBody.subarray(0, 5).toString() === "%PDF-");
 
-  const ownUni = signAccessToken({ userId: "ADM_CSE_001", role: "college_admin", collegeId: COLLEGE });
   const asOwn = await fetch(`${base}/api/admissions/documents/${docId}/file`, { headers: { authorization: `Bearer ${ownUni}` } });
   check("the owning university can decrypt it", asOwn.status === 200);
 
@@ -334,12 +339,25 @@ async function main() {
   check("a tampered file is detected, not served", asTampered.status === 422, `got ${asTampered.status}`);
   fs.writeFileSync(cipherPath, original);
 
-  // ── 10. verify, then enrol ────────────────────────────────────────────────
-  console.log("\n10. TNTEU verifies, the university enrols");
-  for (const type of ["10th_marksheet", "12th_marksheet", "ug_degree", "transfer_certificate", "id_proof"]) {
-    const d = await DocumentSubmission.findOne({ applicantId, documentType: type }).lean();
-    await call("PATCH", `/api/admissions/documents/${d._id}/verify`, { token: tnteu, body: { extractedFields: d.extractedFields } });
-  }
+  // ── 10. both stages approve, then the university enrols ───────────────────
+  console.log("\n10. University bulk-approves, TNTEU bulk-approves, then enrolment");
+  const myDocs = await DocumentSubmission.find({ applicantId }).select("_id").lean();
+  const myIds = myDocs.map((d) => String(d._id));
+
+  const stage1 = await call("POST", "/api/admissions/queue/bulk", {
+    token: ownUni, body: { decision: "approve", documentIds: myIds },
+  });
+  check("the university approves all 5 in one action", stage1.body.decidedCount === 5,
+    JSON.stringify(stage1.body).slice(0, 200));
+  const midway = await Applicant.findOne({ applicantId }).lean();
+  check("a university approval alone does not verify the applicant", midway.status === "under_review", midway.status);
+
+  const stage2 = await call("POST", "/api/admissions/queue/bulk", {
+    token: tnteu, body: { decision: "approve", documentIds: myIds },
+  });
+  check("TNTEU gives final approval to all 5", stage2.body.decidedCount === 5,
+    JSON.stringify(stage2.body).slice(0, 200));
+
   const refreshed = await Applicant.findOne({ applicantId }).lean();
   check("the applicant is now verified", refreshed.status === "verified", refreshed.status);
 

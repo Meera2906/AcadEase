@@ -41,7 +41,8 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 | Legibility / clarity gate (dimensions, DPI, JPEG quantisation, blank pages) | `utils/imageInspect.js` | ✅ |
 | Course eligibility rules (B.Ed / M.Ed, reserved-category rates) | `utils/eligibility.js` | ✅ |
 | **Document identity + manual-verification guidance** (TN board keyword signatures, per-issuer portals) | `utils/tnDocuments.js` | ✅ unit-tested in `test/tnDocuments.test.js` |
-| **Admission verification** (bulk import → hash + rule flags → TNTEU queue → verify/reject → enrol) | `routes/admissionRoutes.js`, `controllers/admissionController.js` | ✅ — **this is now the demo centrepiece** |
+| **Admission verification** (bulk import → hash + rule flags → university bulk approval → TNTEU bulk approval → enrol) | `routes/admissionRoutes.js`, `controllers/admissionController.js` | ✅ — **this is now the demo centrepiece** |
+| **Bulk-approval gate** (clean / needs-a-look / suspect; at-approval re-hash and duplicate re-check) | `utils/reviewGate.js` | ✅ unit-tested in `test/reviewGate.test.js`, end-to-end in `e2e-twostage.mjs` |
 | Admission rules (required-document checklist, deterministic flags, derived applicant status) | `utils/admissionRules.js` | ✅ unit-tested in `test/admissionRules.test.js` |
 | Assistive field pre-fill from document text | `utils/documentExtract.js`, `utils/pdfText.js` | ✅ — pattern-matching only, never a decision |
 | CSV reader (quoted fields, per-row line numbers) | `utils/csv.js` | ✅ |
@@ -186,8 +187,8 @@ whatever's in your MongoDB.
 | **University bulk submission** (CSV + documents, per-row report) | `/admin/admissions/upload` | ✅ |
 | **Applicant tracking** (paginated, checklist progress, enrol) | `/admin/admissions/applicants` | ✅ |
 | Applicant detail + required-document checklist | `/admin/admissions/applicants/:applicantId` | ✅ |
-| **TNTEU verification queue** (flagged-first, throughput stats, per-university backlog) | `/admin/verification` | ✅ `tnteu_admin` only |
-| **Side-by-side document review** (preview · editable fields · flags · verify/reject) | `/admin/verification/:documentId` | ✅ `tnteu_admin` only |
+| **Two-stage verification queue** (flagged-first, bulk approve/reject, throughput stats, per-university backlog) | `/admin/verification` | ✅ stage 1 `college_admin` · stage 2 `tnteu_admin` — the server decides which documents each sees |
+| **Side-by-side document review** (preview · editable fields · flags · approval chain · verify/reject) | `/admin/verification/:documentId` | ✅ decision buttons live only at the viewer's own stage |
 | Student admission status + checklist | `/student/admission` | ✅ |
 | Student dashboard (live %, streak, warning banner) | `/student/dashboard` | ✅ |
 | Faculty attendance marking (the hero feature) | `/faculty/attendance` | ✅ — simplified roster input (paste student IDs); swap for a real `GET /api/attendance/course/:courseId/date/:date` roster call when you have a course picker |

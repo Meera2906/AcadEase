@@ -15,6 +15,7 @@ import {
   streamDocumentFile,
   verifyDocument,
   rejectDocument,
+  bulkDecide,
   getAdmissionStats,
   listBatches,
   getBatch,
@@ -27,7 +28,10 @@ const router = Router();
 router.use(requireAuth);
 
 const universityStaff = requireRole("college_admin", "college_coordinator", "tnteu_admin");
-const tnteuOnly = requireRole("tnteu_admin");
+// Both institutions review, but at different stages of the same chain. Which
+// stage a caller may act at is decided from their role inside the controller,
+// never from the request — so this shared guard cannot let anyone act twice.
+const reviewStaff = requireRole("college_admin", "college_coordinator", "tnteu_admin");
 
 // Turn multer's own errors (size, count, type) into clean 400s instead of 500s.
 function withUpload(middleware) {
@@ -65,12 +69,16 @@ router.get("/applicants", universityStaff, asyncHandler(listApplicants));
 router.get("/applicants/:applicantId", universityStaff, asyncHandler(getApplicant));
 router.post("/applicants/:applicantId/enroll", universityStaff, asyncHandler(enrollApplicant));
 
-// ── TNTEU verification queue ───────────────────────────────────────────────
-router.get("/queue", tnteuOnly, asyncHandler(getVerificationQueue));
+// ── Two-stage verification queue ───────────────────────────────────────────
+// The same routes serve both reviewers. A university admin sees and can only
+// act on documents at the "college" stage (their own applicants); TNTEU sees
+// and can only act on documents the university has already approved.
+router.get("/queue", reviewStaff, asyncHandler(getVerificationQueue));
+router.post("/queue/bulk", reviewStaff, asyncHandler(bulkDecide));
 router.get("/stats", universityStaff, asyncHandler(getAdmissionStats));
 router.get("/documents/:id", universityStaff, asyncHandler(getDocument));
 router.get("/documents/:id/file", universityStaff, asyncHandler(streamDocumentFile));
-router.patch("/documents/:id/verify", tnteuOnly, asyncHandler(verifyDocument));
-router.patch("/documents/:id/reject", tnteuOnly, asyncHandler(rejectDocument));
+router.patch("/documents/:id/verify", reviewStaff, asyncHandler(verifyDocument));
+router.patch("/documents/:id/reject", reviewStaff, asyncHandler(rejectDocument));
 
 export default router;

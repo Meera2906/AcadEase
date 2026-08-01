@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 
+// Kept as a literal rather than imported from utils/reviewGate.js: that module
+// reaches models/index.js transitively, and a cycle would leave this enum
+// undefined at schema-compile time.
+const REVIEW_STAGES = ["college", "tnteu", "complete"];
+
 // One uploaded admission proof. `extractedFields` is assistive pre-fill only —
 // a human reviewer confirms or corrects it before the document can be verified.
 // `flags` are deterministic rule-based warnings, never auto-rejections.
@@ -73,6 +78,46 @@ const documentSubmissionSchema = new mongoose.Schema(
     // not consume reviewer attention.
     queued: { type: Boolean, default: true, index: true },
 
+    // ── Two-stage review chain ──────────────────────────────────────────────
+    // Every document is approved twice, by two different institutions, in a
+    // fixed order: the university that submitted it, then TNTEU. `reviewStage`
+    // is the single source of truth for whose desk it is on right now, so a
+    // reviewer physically cannot act out of turn.
+    //
+    //   college  → waiting on the submitting university
+    //   tnteu    → university approved it; waiting on TNTEU
+    //   complete → finally verified, or rejected at either stage
+    reviewStage: { type: String, enum: REVIEW_STAGES, default: "college", index: true },
+
+    collegeReview: {
+      decision: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+      by: { type: String, default: null },
+      byName: { type: String, default: null },
+      at: { type: Date, default: null },
+      reason: { type: String, default: null },
+      mode: { type: String, default: null }, // "bulk" | "individual"
+    },
+    tnteuReview: {
+      decision: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+      by: { type: String, default: null },
+      byName: { type: String, default: null },
+      at: { type: Date, default: null },
+      reason: { type: String, default: null },
+      mode: { type: String, default: null },
+    },
+
+    // RSA-PSS counter-signatures, one per decision, each signing over the one
+    // before it (utils/approvalChain.js). A decision cannot be forged by a
+    // party that does not hold the institution's private key, and neither link
+    // can be removed or reordered without breaking every signature after it.
+    approvals: [{ type: mongoose.Schema.Types.Mixed }],
+
+    // Outcome of the at-approval-time re-hash of the file on disk.
+    integrityCheckedAt: { type: Date, default: null },
+    integrityOk: { type: Boolean, default: null },
+
+    // The overall outcome. Only TNTEU's approval can set this to "verified" —
+    // a university approval merely advances the stage.
     status: { type: String, enum: ["pending", "verified", "rejected"], default: "pending", index: true },
     verifiedBy: { type: String, default: null },
     verifiedAt: { type: Date, default: null },
@@ -87,6 +132,10 @@ const documentSubmissionSchema = new mongoose.Schema(
 // The verification queue sorts flagged-first, then oldest-first. This index
 // backs that sort so the queue never needs an in-memory sort.
 documentSubmissionSchema.index({ queued: 1, status: 1, flagCount: -1, createdAt: 1 });
+// The stage-scoped queue: each reviewer only ever sees the documents currently
+// on their own desk, ordered flagged-first then oldest-first.
+documentSubmissionSchema.index({ reviewStage: 1, queued: 1, status: 1, flagCount: -1, createdAt: 1 });
+documentSubmissionSchema.index({ collegeId: 1, reviewStage: 1, status: 1 });
 documentSubmissionSchema.index({ collegeId: 1, status: 1 });
 documentSubmissionSchema.index({ applicantId: 1, documentType: 1 }, { unique: true });
 

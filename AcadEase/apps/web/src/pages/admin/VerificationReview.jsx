@@ -133,9 +133,11 @@ export default function VerificationReview() {
     try {
       const res = await api.patch(`/admissions/documents/${documentId}/verify`, { extractedFields: fields });
       showToast(
-        `Verified. ${res.data.applicantStatus === "verified"
-          ? "All required documents are now verified — the applicant can be enrolled."
-          : `${res.data.verifiedCount} of ${res.data.requiredCount} required documents verified.`}`,
+        res.data.outcome === "forwarded"
+          ? "Approved and counter-signed. It is now with TNTEU for final approval."
+          : `Verified. ${res.data.applicantStatus === "verified"
+              ? "All required documents are now verified — the applicant can be enrolled."
+              : `${res.data.verifiedCount} of ${res.data.requiredCount} required documents verified.`}`,
         "success"
       );
       navigate("/admin/verification");
@@ -174,8 +176,16 @@ export default function VerificationReview() {
     );
   }
 
-  const { document: doc, applicant, collegeName, checklist, verifiedCount, requiredCount, duplicateOf, flagLabels, eligibility } = data;
-  const decided = doc.status !== "pending";
+  const {
+    document: doc, applicant, collegeName, checklist, verifiedCount, requiredCount,
+    duplicateOf, flagLabels, eligibility, stage, stageLabel, viewerStage, canDecide,
+    approvalChain,
+  } = data;
+  // Read-only unless this document is actually on this reviewer's desk. A
+  // university admin cannot re-open a decision they have already forwarded, and
+  // TNTEU cannot approve something the university has not yet stood behind.
+  const decided = !canDecide;
+  const isCollegeStage = viewerStage === "college";
 
   const qr = doc.qrCheck || {};
   const QR_VIEW = {
@@ -216,14 +226,35 @@ export default function VerificationReview() {
         </div>
       </div>
 
-      {decided && (
-        <div className="mb-5 p-3 rounded-card bg-paper border border-border text-sm text-text-secondary">
-          This document was already <strong>{doc.status}</strong>
-          {doc.verifiedBy ? ` by ${doc.verifiedBy}` : ""}
-          {doc.verifiedAt ? ` on ${new Date(doc.verifiedAt).toLocaleString()}` : ""}
-          {doc.rejectionReason ? ` — ${doc.rejectionReason}` : ""}.
-        </div>
-      )}
+      {/* Where this document is in the two-stage chain, and why the decision
+          buttons are or are not available to this reviewer. */}
+      <div className="mb-5 p-3 rounded-card bg-paper border border-border text-sm text-text-secondary">
+        <span className="font-semibold text-text-primary">Stage: {stageLabel}</span>
+        {doc.status !== "pending" && (
+          <>
+            {" "}— finally <strong>{doc.status}</strong>
+            {doc.verifiedBy ? ` by ${doc.verifiedBy}` : ""}
+            {doc.verifiedAt ? ` on ${new Date(doc.verifiedAt).toLocaleString()}` : ""}
+            {doc.rejectionReason ? ` — ${doc.rejectionReason}` : ""}.
+          </>
+        )}
+        {doc.status === "pending" && !canDecide && (
+          <>
+            {" "}—{" "}
+            {stage === "tnteu"
+              ? "your university has approved this; it is now with TNTEU and you can no longer change it."
+              : "the submitting university has not approved this yet, so it is not on your desk."}
+          </>
+        )}
+        {canDecide && (
+          <>
+            {" "}—{" "}
+            {isCollegeStage
+              ? "your approval forwards it to TNTEU for final approval. It does not verify it."
+              : "your approval is final: it marks the document verified."}
+          </>
+        )}
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Left — the document itself */}
@@ -441,7 +472,11 @@ export default function VerificationReview() {
               <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-border">
                 <Button variant="success" disabled={busy} onClick={verify}>
                   <CheckCircle2 size={15} className="mr-1.5" />
-                  {busy === "verify" ? "Verifying…" : "Confirm fields & verify"}
+                  {busy === "verify"
+                    ? "Signing…"
+                    : isCollegeStage
+                      ? "Confirm fields & send to TNTEU"
+                      : "Confirm fields & verify"}
                 </Button>
                 <Button variant="destructive" disabled={busy} onClick={() => setShowReject((open) => !open)}>
                   <XCircle size={15} className="mr-1.5" /> Reject
@@ -468,6 +503,37 @@ export default function VerificationReview() {
             )}
           </Card>
 
+          {/* The counter-signature chain. Each link is re-verified against the
+              signing institution's public key on every page load — a decision
+              edited in the database shows here as broken, not as approved. */}
+          {approvalChain?.links?.length > 0 && (
+            <Card className="!p-4">
+              <h2 className="font-display text-sm font-bold text-text-primary mb-3 flex items-center gap-1.5">
+                <ShieldCheck size={14} className={approvalChain.valid ? "text-success" : "text-danger"} />
+                Approval chain
+              </h2>
+              <div className="space-y-2.5">
+                {approvalChain.links.map((link, index) => (
+                  <div key={index} className="text-xs">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-text-primary">
+                        {link.stage === "university_review" ? "University" : "TNTEU"} · {link.decision}
+                      </span>
+                      <span className={link.valid ? "text-success" : "text-danger"}>
+                        {link.valid ? "signature valid" : "signature broken"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-text-muted">
+                      {link.actorName || link.actorId} · {new Date(link.decidedAt).toLocaleString()}
+                    </p>
+                    {link.remarks && <p className="text-[11px] text-text-secondary">{link.remarks}</p>}
+                    {!link.valid && <p className="text-[11px] text-danger">{link.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           <Card className="!p-4">
             <h2 className="font-display text-sm font-bold text-text-primary mb-3">
               This applicant&apos;s checklist
@@ -486,7 +552,9 @@ export default function VerificationReview() {
                     ) : item.documentId && item.status === "pending" ? (
                       <Link to={`/admin/verification/${item.documentId}`} className="text-signal hover:underline">open</Link>
                     ) : (
-                      <span className="text-text-muted">{item.status}</span>
+                      <span className="text-text-muted">
+                        {item.status === "pending" && item.reviewStage === "tnteu" ? "with TNTEU" : item.status}
+                      </span>
                     )}
                   </div>
                 );

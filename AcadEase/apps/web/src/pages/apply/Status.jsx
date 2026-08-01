@@ -114,7 +114,9 @@ export default function ApplyStatus() {
                               ? `Verified${doc?.verifiedAt ? ` on ${new Date(doc.verifiedAt).toLocaleDateString()}` : ""}`
                               : item.status === "rejected"
                                 ? doc?.rejectionReason || "Rejected"
-                                : "Waiting for TNTEU review"}
+                                : item.reviewStage === "tnteu"
+                                  ? "Approved by your university — waiting for TNTEU's final approval"
+                                  : "Waiting for your university's review (step 1 of 2)"}
                         </p>
                       </div>
                     </div>

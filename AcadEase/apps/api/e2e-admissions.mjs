@@ -109,19 +109,26 @@ async function main() {
   const foreignFile = await call("GET", `/api/admissions/documents/${anyDoc._id}/file`, { token: otherUni });
   check("other university cannot stream a foreign document", foreignFile.status === 404);
 
-  // ── 4. the TNTEU queue ──────────────────────────────────────────────────
-  console.log("\n4. TNTEU opens the queue");
-  const queue = await call("GET", "/api/admissions/queue", { token: tnteu, });
-  check("queue returns 200", queue.status === 200);
-  check("queue is paginated server-side (25 of 35)", queue.body.documents.length === 25 && queue.body.total === 35,
-    `page=${queue.body.documents.length} total=${queue.body.total}`);
-  check("flagged documents sort first", queue.body.documents[0].flagCount > 0);
-  const flaggedRun = queue.body.documents.findIndex((d) => d.flagCount === 0);
+  // ── 4. stage one: the university's own queue ────────────────────────────
+  console.log("\n4. The submitting university opens its stage-1 queue");
+  const uniQueue = await call("GET", "/api/admissions/queue", { token: uniAdmin });
+  check("queue returns 200", uniQueue.status === 200);
+  check("the university is at the college stage", uniQueue.body.stage === "college", uniQueue.body.stage);
+  check("queue is paginated server-side (25 of 35)", uniQueue.body.documents.length === 25 && uniQueue.body.total === 35,
+    `page=${uniQueue.body.documents.length} total=${uniQueue.body.total}`);
+  check("flagged documents sort first", uniQueue.body.documents[0].flagCount > 0);
+  const flaggedRun = uniQueue.body.documents.findIndex((d) => d.flagCount === 0);
   check("no flagged document appears after an unflagged one",
-    queue.body.documents.slice(flaggedRun).every((d) => d.flagCount === 0));
+    uniQueue.body.documents.slice(flaggedRun).every((d) => d.flagCount === 0));
+  check("30 of the 35 are bulk-approvable", uniQueue.body.summary.clean === 30,
+    JSON.stringify(uniQueue.body.summary));
 
-  const flaggedOnly = await call("GET", "/api/admissions/queue?flagged=true", { token: tnteu });
+  const flaggedOnly = await call("GET", "/api/admissions/queue?flagged=true", { token: uniAdmin });
   check("flagged filter returns exactly those 5", flaggedOnly.body.total === 5, `got ${flaggedOnly.body.total}`);
+
+  const tnteuEmpty = await call("GET", "/api/admissions/queue", { token: tnteu });
+  check("TNTEU's stage-2 queue is empty until the university approves", tnteuEmpty.body.total === 0,
+    `got ${tnteuEmpty.body.total}`);
 
   // ── 5. review detail ────────────────────────────────────────────────────
   console.log("\n5. TNTEU opens the duplicate document");
@@ -137,34 +144,89 @@ async function main() {
   check("document streams to TNTEU", fileRes.status === 200 && fileRes.headers.get("content-type") === "application/pdf");
   check("stream is not cacheable", fileRes.headers.get("cache-control") === "private, no-store");
 
-  // ── 6. verify APP_2025_001 document by document ─────────────────────────
-  console.log("\n6. TNTEU verifies APP_2025_001's five required documents");
+  // ── 6. the two-stage chain for APP_2025_001 ─────────────────────────────
+  console.log("\n6. APP_2025_001's five documents pass through both stages");
   const required = ["10th_marksheet", "12th_marksheet", "ug_degree", "transfer_certificate", "id_proof"];
-  for (let i = 0; i < required.length; i += 1) {
-    const d = await DocumentSubmission.findOne({ applicantId: "APP_2025_001", documentType: required[i] }).lean();
-    const res = await call("PATCH", `/api/admissions/documents/${d._id}/verify`, {
+  const oneIds = [];
+  for (const type of required) {
+    const d = await DocumentSubmission.findOne({ applicantId: "APP_2025_001", documentType: type }).lean();
+    oneIds.push(String(d._id));
+  }
+
+  // TNTEU cannot reach into stage one.
+  const tooSoon = await call("PATCH", `/api/admissions/documents/${oneIds[0]}/verify`, { token: tnteu });
+  check("TNTEU cannot verify before the university has approved", tooSoon.status === 409, `got ${tooSoon.status}`);
+
+  const uniBulk = await call("POST", "/api/admissions/queue/bulk", {
+    token: uniAdmin,
+    body: { decision: "approve", documentIds: oneIds },
+  });
+  // 001's 10th marksheet was clean when it arrived — 003 copied it afterwards.
+  // The at-approval duplicate re-check is what catches that; without it the
+  // original would be swept through as clean.
+  check("four are forwarded, the copied marksheet is held back",
+    uniBulk.body.decidedCount === 4 && uniBulk.body.skippedCount === 1, JSON.stringify(uniBulk.body).slice(0, 220));
+  check("the reviewer is told which other applicant has the same file",
+    /APP_2025_003/.test(JSON.stringify(uniBulk.body.skipped)), JSON.stringify(uniBulk.body.skipped).slice(0, 200));
+  check("a university approval forwards, it does not verify",
+    uniBulk.body.decided.every((d) => d.outcome === "forwarded"));
+
+  const afterStage1 = await call("GET", "/api/admissions/applicants/APP_2025_001", { token: uniAdmin });
+  check("the applicant is under review, not verified", afterStage1.body.applicant.status === "under_review",
+    afterStage1.body.applicant.status);
+
+  const again = await call("POST", "/api/admissions/queue/bulk", {
+    token: uniAdmin,
+    body: { decision: "approve", documentIds: oneIds },
+  });
+  check("the university cannot approve the same documents twice", again.body.decidedCount === 0 && again.body.skippedCount === 5,
+    JSON.stringify(again.body).slice(0, 200));
+
+  // The reviewer opens the duplicate, sees both copies, and approves the
+  // original individually. Bulk still refuses it; only a human can resolve it.
+  const stillBulk = await call("POST", "/api/admissions/queue/bulk", {
+    token: uniAdmin, body: { decision: "approve", documentIds: [oneIds[0]] },
+  });
+  check("bulk keeps refusing the duplicated file even after it is flagged", stillBulk.body.decidedCount === 0);
+  const resolved = await call("PATCH", `/api/admissions/documents/${oneIds[0]}/verify`, { token: uniAdmin });
+  check("a reviewer can approve the genuine copy individually", resolved.status === 200,
+    JSON.stringify(resolved.body).slice(0, 200));
+
+  console.log("\n6b. TNTEU gives final approval");
+  const tnteuQueue = await call("GET", "/api/admissions/queue", { token: tnteu });
+  check("TNTEU now sees the five forwarded documents", tnteuQueue.body.total === 5, `got ${tnteuQueue.body.total}`);
+  check("TNTEU is shown who approved them at stage one",
+    tnteuQueue.body.documents.every((d) => d.collegeReview?.by === "ADM_CSE_001"));
+
+  for (let i = 0; i < oneIds.length; i += 1) {
+    const res = await call("PATCH", `/api/admissions/documents/${oneIds[i]}/verify`, {
       token: tnteu,
-      body: { extractedFields: { ...d.extractedFields, name: "Anjali Murugan" } },
+      body: { extractedFields: { name: "Anjali Murugan" } },
     });
-    const expected = i === required.length - 1 ? "verified" : "under_review";
+    const expected = i === oneIds.length - 1 ? "verified" : "under_review";
     check(`after ${i + 1}/5 verified applicant is "${expected}"`, res.body.applicantStatus === expected,
       `got ${res.body.applicantStatus}`);
   }
 
-  const uniOnly = await call("PATCH", `/api/admissions/documents/${anyDoc._id}/verify`, { token: uniAdmin });
-  check("a university admin cannot verify documents", uniOnly.status === 403, `got ${uniOnly.status}`);
+  const doubleSign = await DocumentSubmission.findById(oneIds[0]).lean();
+  check("the document carries both counter-signatures", doubleSign.approvals?.length === 2,
+    `got ${doubleSign.approvals?.length}`);
+  check("stage one was signed by the university's key", doubleSign.approvals[0].keyId === "TNTEU_COL_0417");
+  check("stage two was signed by TNTEU's key", doubleSign.approvals[1].keyId === "tnteu");
 
   // ── 7. rejection requires a reason ──────────────────────────────────────
   console.log("\n7. Rejection needs a written reason");
   const tcBad = await DocumentSubmission.findOne({ applicantId: "APP_2025_004", documentType: "transfer_certificate" }).lean();
-  const noReason = await call("PATCH", `/api/admissions/documents/${tcBad._id}/reject`, { token: tnteu, body: { reason: "no" } });
+  const noReason = await call("PATCH", `/api/admissions/documents/${tcBad._id}/reject`, { token: uniAdmin, body: { reason: "no" } });
   check("empty reason is refused", noReason.status === 400);
   const rejected = await call("PATCH", `/api/admissions/documents/${tcBad._id}/reject`, {
-    token: tnteu,
+    token: uniAdmin,
     body: { reason: "Transfer certificate is issued to Prakash Ramalingam, not this applicant." },
   });
   check("rejection succeeds", rejected.status === 200);
   check("rejecting one document rejects the applicant", rejected.body.applicantStatus === "rejected");
+  check("a stage-one rejection never reaches TNTEU",
+    (await DocumentSubmission.findById(tcBad._id).lean()).reviewStage === "complete");
 
   // ── 8. enrolment gate ───────────────────────────────────────────────────
   console.log("\n8. Enrolment");
@@ -208,11 +270,16 @@ async function main() {
     JSON.stringify(scopedStats.body.documents));
 
   const audits = await AuditLog.find({ action: /^admission_/ }).lean();
-  check("every review is audited", audits.filter((a) => a.action.includes("document_")).length === 6,
-    `got ${audits.filter((a) => a.action.includes("document_")).length}`);
+  const reviewAudits = audits.filter((a) => a.action.includes("document_") || a.action.includes("bulk_"));
+  // 3 bulk sweeps + 1 individual college approval + 5 TNTEU verifies + 1 reject
+  check("every decision is audited", reviewAudits.length === 10, `got ${reviewAudits.length}`);
   const rejAudit = audits.find((a) => a.action === "admission_document_rejected");
   check("audit records who, what and why",
-    rejAudit?.actorId === "SUP_001" && rejAudit?.metadata?.reason?.includes("Prakash"));
+    rejAudit?.actorId === "ADM_CSE_001" && rejAudit?.metadata?.reason?.includes("Prakash"));
+  const bulkAudit = audits.find((a) => a.action === "admission_bulk_approved" && a.metadata?.decided === 4);
+  check("the bulk sweep is audited with its stage and document list",
+    bulkAudit?.metadata?.stage === "college" && bulkAudit?.metadata?.documentIds?.length === 4,
+    JSON.stringify(bulkAudit?.metadata).slice(0, 160));
 
   server.close();
   await mongoose.connection.close();

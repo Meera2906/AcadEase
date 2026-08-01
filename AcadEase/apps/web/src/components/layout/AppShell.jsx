@@ -35,6 +35,9 @@ const NAV_BY_ROLE = {
   // where each of their applicants sits in TNTEU's review.
   college_admin: [
     { to: "/admin/dashboard",              label: "Dashboard",       icon: LayoutDashboard },
+    // Stage one of the review chain: the university approves its own
+    // applicants' documents before TNTEU ever sees them.
+    { to: "/admin/verification",           label: "Verify Documents", icon: ShieldCheck },
     { to: "/admin/admissions/upload",      label: "Bulk Submission", icon: UploadCloud },
     { to: "/admin/admissions/applicants",  label: "Applicants",      icon: UserCheck },
     { to: "/admin/university-requests",    label: "TNTEU Requests",  icon: Landmark },
