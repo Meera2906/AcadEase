@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const attendanceRecordSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     courseId: { type: String, required: true, index: true },
     studentId: { type: String, required: true, index: true },
     facultyId: { type: String, required: true },

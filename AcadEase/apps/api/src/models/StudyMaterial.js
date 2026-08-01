@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const studyMaterialSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     moduleType: { type: String, enum: ["academic", "tet"], default: "academic" },

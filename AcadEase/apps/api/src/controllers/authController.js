@@ -8,7 +8,8 @@ const LOCK_THRESHOLD = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes, per PRD 5.1.2
 
 function staffRequires2fa(role) {
-  return role === "faculty" || role === "admin" || role === "superadmin";
+  const normalized = role === "admin" ? "college_admin" : role === "superadmin" ? "tnteu_admin" : role;
+  return ["faculty", "college_admin", "college_coordinator", "tnteu_admin"].includes(normalized);
 }
 
 // POST /api/auth/login
@@ -91,7 +92,7 @@ export async function setupTotp(req, res) {
   const user = await User.findOne({ userId });
   if (!user) return res.status(404).json({ error: "User not found" });
   if (!staffRequires2fa(user.role)) {
-    return res.status(403).json({ error: "2FA setup is only required for faculty and admin accounts" });
+    return res.status(403).json({ error: "2FA setup is only required for faculty, college_admin, college_coordinator, and TNTEU admin accounts" });
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -139,11 +140,12 @@ async function issueTokens(res, user) {
     accessToken,
     user: {
       userId: user.userId,
-      role: user.role,
+      role: user.role === "admin" ? "college_admin" : user.role === "superadmin" ? "tnteu_admin" : user.role,
       name: user.name,
       email: user.email,
       departmentId: user.departmentId,
-      institutionId: user.institutionId,
+      collegeId: user.collegeId || user.institutionId || null,
+      institutionId: user.institutionId || user.collegeId || null,
     },
   });
 }

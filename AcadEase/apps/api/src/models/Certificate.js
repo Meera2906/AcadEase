@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const certificateSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     certId: { type: String, required: true, unique: true, index: true }, // UUID v4
     studentId: { type: String, required: true, index: true },
     type: {

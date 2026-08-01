@@ -44,7 +44,7 @@ export async function listCertificateRequests(req, res) {
 export async function listStudentCertificateRequests(req, res) {
   const { studentId } = req.params;
   const isSelf = req.user.userId === studentId;
-  const isPrivileged = ["admin", "superadmin"].includes(req.user.role);
+  const isPrivileged = ["college_admin", "tnteu_admin", "admin", "superadmin"].includes(req.user.role);
 
   if (!isSelf && !isPrivileged) {
     if (req.user.role !== "faculty") {
@@ -169,7 +169,7 @@ export async function downloadCertificate(req, res) {
   if (!cert) return res.status(404).json({ error: "Certificate not found" });
 
   const isOwner = req.user?.userId === cert.studentId;
-  const isPrivileged = ["admin", "superadmin"].includes(req.user?.role);
+  const isPrivileged = ["college_admin", "tnteu_admin", "admin", "superadmin"].includes(req.user?.role);
   if (!isOwner && !isPrivileged) {
     if (req.user?.role !== "faculty") {
       return res.status(403).json({ error: "Forbidden" });

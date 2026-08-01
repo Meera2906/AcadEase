@@ -6,3 +6,6 @@ build/
 *.log
 .DS_Store
 apps/api/storage/
+# Admission proofs are identity documents — never served statically, never committed.
+apps/api/secure-storage/
+apps/api/demo-data/

@@ -5,10 +5,13 @@ import { useAuth } from "../context/AuthContext.jsx";
 import Button from "../components/ui/Button.jsx";
 
 const ROLE_HOME = {
-  student:    "/student/dashboard",
-  faculty:    "/faculty/dashboard",
-  admin:      "/admin/dashboard",
-  superadmin: "/admin/dashboard",
+  student:           "/student/dashboard",
+  faculty:           "/faculty/dashboard",
+  admin:             "/admin/dashboard",
+  superadmin:        "/admin/dashboard",
+  college_admin:     "/admin/dashboard",
+  tnteu_admin:       "/admin/dashboard",
+  college_coordinator: "/admin/dashboard",
 };
 
 // ── QR code via free public API (no package needed) ─────────────────────────
@@ -267,7 +270,7 @@ export default function Login() {
               <div className="mt-6 p-3 bg-white border border-border rounded-card">
                 <p className="text-xs text-text-muted font-medium mb-1">Demo credentials</p>
                 <p className="text-xs font-mono text-text-secondary">
-                  Password: <span className="text-text-primary">Passw0rd!</span>
+                  Password: <span className="text-text-primary">Demo@2025</span>
                 </p>
                 <p className="text-xs text-text-muted mt-1">
                   Student: STU_2021_CS_001 · Faculty: FAC_CSE_001 · Admin: ADM_CSE_001

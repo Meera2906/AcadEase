@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, default: null, index: true },
     userId: { type: String, required: true, index: true },
     type: {
       type: String,
@@ -17,6 +18,7 @@ const notificationSchema = new mongoose.Schema(
         "streak_milestone",
         "assessment_reminder",
         "announcement",
+        "admission",
       ],
       required: true,
     },

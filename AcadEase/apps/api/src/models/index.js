@@ -1,3 +1,4 @@
+export { default as College } from "./College.js";
 export { default as User } from "./User.js";
 export { default as Department } from "./Department.js";
 export { default as Course } from "./Course.js";
@@ -14,3 +15,7 @@ export { default as Notification } from "./Notification.js";
 export { default as XpLedger } from "./XpLedger.js";
 export { default as Announcement } from "./Announcement.js";
 export { default as StudyMaterial } from "./StudyMaterial.js";
+export { default as AuditLog } from "./AuditLog.js";
+export { default as Applicant } from "./Applicant.js";
+export { default as DocumentSubmission } from "./DocumentSubmission.js";
+export { default as AdmissionBatch } from "./AdmissionBatch.js";

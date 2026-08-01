@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const marksSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     assessmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Assessment", required: true, index: true },
     courseId: { type: String, required: true },
     studentId: { type: String, required: true, index: true },

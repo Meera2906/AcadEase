@@ -6,10 +6,10 @@ import AppShell from "../../components/layout/AppShell.jsx";
 import Badge from "../../components/ui/Badge.jsx";
 import Toast, { useToast } from "../../components/ui/Toast.jsx";
 
-const ROLES = ["all", "student", "faculty", "admin"];
+const ROLES = ["all", "student", "faculty", "college_admin", "tnteu_admin"];
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm] = useState({ userId: "", name: "", email: "", password: "Passw0rd!", role: "student", departmentId: "CSE_2024", semester: 5, section: "A", batchYear: 2021, enrollmentNumber: "", designation: "" });
+  const [form, setForm] = useState({ userId: "", name: "", email: "", password: "Demo@2025", role: "student", departmentId: "CSE_2024", semester: 5, section: "A", batchYear: 2021, enrollmentNumber: "", designation: "" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -44,7 +44,7 @@ function AddUserModal({ onClose, onSaved }) {
             <div>
               <label className="label">Role</label>
               <select value={form.role} onChange={f("role")} className="input">
-                {["student","faculty","admin","superadmin"].map((r) => <option key={r}>{r}</option>)}
+                {["student","faculty","college_admin","tnteu_admin"].map((r) => <option key={r}>{r}</option>)}
               </select>
             </div>
             <div>
@@ -57,7 +57,7 @@ function AddUserModal({ onClose, onSaved }) {
               <div><label className="label">Batch Year</label><input type="number" value={form.batchYear} onChange={f("batchYear")} className="input" /></div>
               <div><label className="label">Enrollment No.</label><input value={form.enrollmentNumber} onChange={f("enrollmentNumber")} className="input" /></div>
             </>}
-            {(form.role === "faculty" || form.role === "admin") && (
+            {(form.role === "faculty" || form.role === "college_admin" || form.role === "tnteu_admin") && (
               <div className="col-span-2"><label className="label">Designation</label><input value={form.designation} onChange={f("designation")} className="input" /></div>
             )}
           </div>

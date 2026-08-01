@@ -15,6 +15,7 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import assessmentRoutes from "./routes/assessmentRoutes.js";
 import certificateRoutes from "./routes/certificateRoutes.js";
 import grievanceRoutes from "./routes/grievanceRoutes.js";
+import admissionRoutes from "./routes/admissionRoutes.js";
 import miscRoutes from "./routes/miscRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
@@ -38,8 +39,21 @@ app.use(
 );
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+const csrfExemptPaths = new Set([
+  "/api/auth/login",
+  "/api/auth/refresh",
+  "/api/auth/verify-totp",
+  "/api/auth/setup-totp",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+]);
+
 app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  if (csrfExemptPaths.has(req.path) || req.path.startsWith("/api/auth/reset-password/")) {
+    return next();
+  }
+
   const cookieToken = req.cookies?.csrfToken;
   const headerToken = req.headers["x-csrf-token"];
   if (!cookieToken || !headerToken || cookieToken !== headerToken) {
@@ -65,6 +79,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api", assessmentRoutes); // exposes /api/assessments/*, /api/marks/*, /api/results/*
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/grievances", grievanceRoutes);
+app.use("/api/admissions", admissionRoutes);
 app.use("/api", miscRoutes); // exposes /api/notifications/*, /api/users/*, /api/admin/*, /api/gamification/*
 
 app.use(notFound);

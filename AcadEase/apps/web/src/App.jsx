@@ -24,6 +24,12 @@ import AdminAttendance from "./pages/admin/Attendance.jsx";
 import AdminMarks from "./pages/admin/Marks.jsx";
 import AdminReports from "./pages/admin/Reports.jsx";
 import AdminProfile from "./pages/admin/Profile.jsx";
+import AdmissionsUpload from "./pages/admin/AdmissionsUpload.jsx";
+import AdmissionsApplicants from "./pages/admin/AdmissionsApplicants.jsx";
+import AdmissionsApplicantDetail from "./pages/admin/AdmissionsApplicantDetail.jsx";
+import VerificationQueue from "./pages/admin/VerificationQueue.jsx";
+import VerificationReview from "./pages/admin/VerificationReview.jsx";
+import StudentAdmissionStatus from "./pages/student/AdmissionStatus.jsx";
 import CertVerify from "./pages/verify/CertVerify.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 
@@ -44,7 +50,9 @@ export default function App() {
       <Route path="/student/grievances" element={<ProtectedRoute roles={["student"]}><StudentGrievances /></ProtectedRoute>} />
       <Route path="/student/od-requests" element={<ProtectedRoute roles={["student"]}><StudentOdRequests /></ProtectedRoute>} />
       <Route path="/student/study-materials" element={<ProtectedRoute roles={["student"]}><StudyMaterialsPage /></ProtectedRoute>} />
-      <Route path="/admin/study-materials" element={<ProtectedRoute roles={["admin", "superadmin", "faculty"]}><StudyMaterialsPage /></ProtectedRoute>} />
+      <Route path="/admin/study-materials" element={<ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}><StudyMaterialsPage /></ProtectedRoute>} />
+
+      <Route path="/student/admission" element={<ProtectedRoute roles={["student"]}><StudentAdmissionStatus /></ProtectedRoute>} />
 
       {/* Student own profile */}
       <Route path="/student/profile" element={<ProtectedRoute roles={["student"]}><StudentProfile /></ProtectedRoute>} />
@@ -53,7 +61,7 @@ export default function App() {
       <Route
         path="/profile/:studentId"
         element={
-          <ProtectedRoute roles={["admin", "superadmin", "faculty"]}>
+          <ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}>
             <StudentProfile />
           </ProtectedRoute>
         }
@@ -66,19 +74,26 @@ export default function App() {
       <Route path="/faculty/od-requests" element={<ProtectedRoute roles={["faculty"]}><FacultyOdRequests /></ProtectedRoute>} />
       <Route path="/faculty/profile" element={<ProtectedRoute roles={["faculty"]}><FacultyProfile /></ProtectedRoute>} />
 
+      {/* Admission verification — the TNTEU bulk-processing workflow */}
+      <Route path="/admin/admissions/upload" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsUpload /></ProtectedRoute>} />
+      <Route path="/admin/admissions/applicants" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsApplicants /></ProtectedRoute>} />
+      <Route path="/admin/admissions/applicants/:applicantId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsApplicantDetail /></ProtectedRoute>} />
+      <Route path="/admin/verification" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationQueue /></ProtectedRoute>} />
+      <Route path="/admin/verification/:documentId" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationReview /></ProtectedRoute>} />
+
       {/* Admin / SuperAdmin — full module suite */}
-      <Route path="/admin/dashboard" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminDashboard /></ProtectedRoute>} />
-      <Route path="/admin/users" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminUsers /></ProtectedRoute>} />
-      <Route path="/admin/departments" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminDepartments /></ProtectedRoute>} />
-      <Route path="/admin/courses" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminCourses /></ProtectedRoute>} />
-      <Route path="/admin/certificates" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminCertificates /></ProtectedRoute>} />
-      <Route path="/admin/grievances" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminGrievances /></ProtectedRoute>} />
-      <Route path="/admin/attendance" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminAttendance /></ProtectedRoute>} />
-      <Route path="/admin/results" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
-      <Route path="/admin/marks" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminMarks /></ProtectedRoute>} />
-      <Route path="/admin/announcements" element={<ProtectedRoute roles={["admin", "superadmin", "faculty"]}><AdminAnnouncements /></ProtectedRoute>} />
-      <Route path="/admin/reports" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>} />
-      <Route path="/admin/profile" element={<ProtectedRoute roles={["admin", "superadmin"]}><AdminProfile /></ProtectedRoute>} />
+      <Route path="/admin/dashboard" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin/users" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminUsers /></ProtectedRoute>} />
+      <Route path="/admin/departments" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminDepartments /></ProtectedRoute>} />
+      <Route path="/admin/courses" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminCourses /></ProtectedRoute>} />
+      <Route path="/admin/certificates" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminCertificates /></ProtectedRoute>} />
+      <Route path="/admin/grievances" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminGrievances /></ProtectedRoute>} />
+      <Route path="/admin/attendance" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminAttendance /></ProtectedRoute>} />
+      <Route path="/admin/results" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminMarks /></ProtectedRoute>} />
+      <Route path="/admin/marks" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminMarks /></ProtectedRoute>} />
+      <Route path="/admin/announcements" element={<ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}><AdminAnnouncements /></ProtectedRoute>} />
+      <Route path="/admin/reports" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminReports /></ProtectedRoute>} />
+      <Route path="/admin/profile" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminProfile /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

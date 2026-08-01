@@ -5,8 +5,11 @@ function accessExpiryForRole(role) {
     case "student":
       return process.env.JWT_ACCESS_EXPIRES_STUDENT || "24h";
     case "faculty":
+    case "college_admin":
+    case "college_coordinator":
     case "admin":
       return process.env.JWT_ACCESS_EXPIRES_STAFF || "8h";
+    case "tnteu_admin":
     case "superadmin":
       return process.env.JWT_ACCESS_EXPIRES_SUPERADMIN || "4h";
     default:
@@ -16,11 +19,13 @@ function accessExpiryForRole(role) {
 
 // Access token payload mirrors PRD Section 5.1.3 exactly.
 export function signAccessToken(user) {
+  const role = user.role === "admin" ? "college_admin" : user.role === "superadmin" ? "tnteu_admin" : user.role;
   const payload = {
     userId: user.userId,
-    role: user.role,
-    departmentId: user.departmentId,
-    institutionId: user.institutionId,
+    role,
+    departmentId: user.departmentId || null,
+    collegeId: user.collegeId || user.institutionId || null,
+    institutionId: user.institutionId || user.collegeId || null,
   };
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
     expiresIn: accessExpiryForRole(user.role),

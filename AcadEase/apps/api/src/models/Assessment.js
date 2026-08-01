@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const assessmentSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     courseId: { type: String, required: true, index: true },
     type: {
       type: String,

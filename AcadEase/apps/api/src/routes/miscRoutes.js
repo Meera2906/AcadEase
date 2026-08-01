@@ -35,43 +35,43 @@ router.post("/users/me/resume", resumeUpload.single("resume"), asyncHandler(uplo
 router.delete("/users/me/resume", asyncHandler(deleteResume));
 
 // Admin: user management
-router.get("/admin/users", requireRole("admin", "superadmin"), asyncHandler(listUsers));
-router.get("/admin/users/:userId", requireRole("admin", "superadmin", "faculty"), asyncHandler(getStudentProfile));
-router.post("/admin/users", requireRole("superadmin"), asyncHandler(createUser));
-router.patch("/admin/users/:id", requireRole("superadmin"), asyncHandler(editUser));
-router.post("/admin/users/bulk-import", requireRole("superadmin"), asyncHandler(bulkImportUsers));
+router.get("/admin/users", requireRole("college_admin", "tnteu_admin"), asyncHandler(listUsers));
+router.get("/admin/users/:userId", requireRole("college_admin", "tnteu_admin", "faculty"), asyncHandler(getStudentProfile));
+router.post("/admin/users", requireRole("tnteu_admin"), asyncHandler(createUser));
+router.patch("/admin/users/:id", requireRole("tnteu_admin"), asyncHandler(editUser));
+router.post("/admin/users/bulk-import", requireRole("college_admin", "tnteu_admin"), asyncHandler(bulkImportUsers));
 
 // Admin: dashboard
-router.get("/admin/dashboard", requireRole("admin", "superadmin", "faculty"), asyncHandler(getAdminDashboard));
+router.get("/admin/dashboard", requireRole("college_admin", "tnteu_admin", "faculty"), asyncHandler(getAdminDashboard));
 
 // Admin: departments
-router.get("/admin/departments", requireRole("admin", "superadmin"), asyncHandler(listDepartments));
-router.post("/admin/departments", requireRole("admin", "superadmin"), asyncHandler(createDepartment));
-router.patch("/admin/departments/:id", requireRole("admin", "superadmin"), asyncHandler(updateDepartment));
+router.get("/admin/departments", requireRole("college_admin", "tnteu_admin"), asyncHandler(listDepartments));
+router.post("/admin/departments", requireRole("college_admin", "tnteu_admin"), asyncHandler(createDepartment));
+router.patch("/admin/departments/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(updateDepartment));
 
 // Admin: courses
-router.get("/admin/courses", requireRole("admin", "superadmin"), asyncHandler(listCourses));
-router.post("/admin/courses", requireRole("admin", "superadmin"), asyncHandler(createCourse));
-router.patch("/admin/courses/:id", requireRole("admin", "superadmin"), asyncHandler(updateCourse));
-router.delete("/admin/courses/:id", requireRole("admin", "superadmin"), asyncHandler(deleteCourse));
+router.get("/admin/courses", requireRole("college_admin", "tnteu_admin"), asyncHandler(listCourses));
+router.post("/admin/courses", requireRole("college_admin", "tnteu_admin"), asyncHandler(createCourse));
+router.patch("/admin/courses/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(updateCourse));
+router.delete("/admin/courses/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteCourse));
 
 // Admin: announcements
 router.get("/admin/announcements", asyncHandler(listAnnouncements));
-router.post("/admin/announcements", requireRole("admin", "superadmin", "faculty"), asyncHandler(createAnnouncement));
-router.delete("/admin/announcements/:id", requireRole("admin", "superadmin"), asyncHandler(deleteAnnouncement));
+router.post("/admin/announcements", requireRole("college_admin", "tnteu_admin", "faculty"), asyncHandler(createAnnouncement));
+router.delete("/admin/announcements/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteAnnouncement));
 
 // Student/Faculty: view announcements targeted to their role
 router.get("/announcements", asyncHandler(listStudentAnnouncements));
 
 // Study materials
-router.post("/study-materials", requireRole("admin", "superadmin", "faculty"), studyMaterialUpload.single("file"), asyncHandler(uploadStudyMaterial));
+router.post("/study-materials", requireRole("college_admin", "tnteu_admin", "faculty"), studyMaterialUpload.single("file"), asyncHandler(uploadStudyMaterial));
 router.post("/study-materials/pyq-practice", studyMaterialUpload.single("file"), asyncHandler(processPyqPractice));
 router.get("/study-materials", asyncHandler(listStudyMaterials));
-router.delete("/study-materials/:id", requireRole("admin", "superadmin", "faculty"), asyncHandler(deleteStudyMaterial));
+router.delete("/study-materials/:id", requireRole("college_admin", "tnteu_admin", "faculty"), asyncHandler(deleteStudyMaterial));
 
 // Admin: reports
-router.get("/admin/reports/attendance", requireRole("admin", "superadmin"), asyncHandler(getAttendanceReport));
-router.get("/admin/reports/marks", requireRole("admin", "superadmin"), asyncHandler(getMarksReport));
+router.get("/admin/reports/attendance", requireRole("college_admin", "tnteu_admin"), asyncHandler(getAttendanceReport));
+router.get("/admin/reports/marks", requireRole("college_admin", "tnteu_admin"), asyncHandler(getMarksReport));
 
 // Gamification
 router.get("/gamification/xp/:studentId", asyncHandler(getStudentXp));

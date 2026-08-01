@@ -32,7 +32,35 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 | Certificates (request → approve → PDF/QR → verify → revoke) | `routes/certificateRoutes.js` | ✅ |
 | Grievances | `routes/grievanceRoutes.js` | ✅ (basic MVP scope per PRD §5.5 — no SLA/escalation, that's Phase 2) |
 | Notifications, users, admin dashboard, gamification XP | `routes/miscRoutes.js` | ✅ core logic · ⬜ `bulk-import` is a documented 501 stub (needs multer + CSV parsing) |
+| **Admission verification** (bulk import → hash + rule flags → TNTEU queue → verify/reject → enrol) | `routes/admissionRoutes.js`, `controllers/admissionController.js` | ✅ — **this is now the demo centrepiece** |
+| Admission rules (required-document checklist, deterministic flags, derived applicant status) | `utils/admissionRules.js` | ✅ unit-tested in `test/admissionRules.test.js` |
+| Assistive field pre-fill from document text | `utils/documentExtract.js`, `utils/pdfText.js` | ✅ — pattern-matching only, never a decision |
+| CSV reader (quoted fields, per-row line numbers) | `utils/csv.js` | ✅ |
 | Seed script | `seed/seed.js` | ✅ matches PRD §9 exactly |
+| Admission demo package generator | `seed/seedAdmissions.js` | ✅ writes `demo-data/` with planted flaws |
+| End-to-end flow check (49 assertions, real Mongo + HTTP) | `e2e-admissions.mjs` | ✅ |
+
+### Admission verification — design notes
+
+- **`pdf-parse` is deliberately not used on this path.** Its bundled pdf.js
+  accumulates state and starts throwing `bad XRef entry` on valid files after
+  roughly eight parses in one process — a 40-file bulk upload would silently
+  mark most of the batch `unreadable` and push the work straight back onto the
+  reviewer. `utils/pdfText.js` walks the content streams directly instead:
+  stateless, dependency-free, and it returns empty (→ an honest `unreadable`
+  flag) rather than guessing when it cannot read a file.
+- **Applicant status is derived, never assigned.** `deriveApplicantStatus()`
+  recomputes from the full required-document checklist after every upload,
+  verify and reject, and `enrollApplicant` re-derives rather than trusting the
+  stored value — enrolment is the point where a stale status would actually
+  admit someone.
+- **`DocumentSubmission` carries a denormalised `flagCount`** so the
+  flagged-first queue ordering comes off the
+  `{ status, flagCount: -1, createdAt }` index instead of an in-memory sort.
+- **Re-uploading a document type replaces the file and resets it to `pending`.**
+  A resubmission has to be looked at again.
+- Files live in `apps/api/secure-storage/admission-docs/<collegeId>/` under
+  generated UUID names, outside the `/storage` static mount.
 
 **Every route in PRD §7 (the full API catalogue) exists and is mounted.**
 Nothing returns fake/mock data — it's all real Mongoose queries against
@@ -60,6 +88,12 @@ whatever's in your MongoDB.
 | Screen | Route | Status |
 |---|---|---|
 | Login (password + TOTP step) | `/login` | ✅ |
+| **University bulk submission** (CSV + documents, per-row report) | `/admin/admissions/upload` | ✅ |
+| **Applicant tracking** (paginated, checklist progress, enrol) | `/admin/admissions/applicants` | ✅ |
+| Applicant detail + required-document checklist | `/admin/admissions/applicants/:applicantId` | ✅ |
+| **TNTEU verification queue** (flagged-first, throughput stats, per-university backlog) | `/admin/verification` | ✅ `tnteu_admin` only |
+| **Side-by-side document review** (preview · editable fields · flags · verify/reject) | `/admin/verification/:documentId` | ✅ `tnteu_admin` only |
+| Student admission status + checklist | `/student/admission` | ✅ |
 | Student dashboard (live %, streak, warning banner) | `/student/dashboard` | ✅ |
 | Faculty attendance marking (the hero feature) | `/faculty/attendance` | ✅ — simplified roster input (paste student IDs); swap for a real `GET /api/attendance/course/:courseId/date/:date` roster call when you have a course picker |
 | Student attendance detail + OD form | `/student/attendance` | ✅ |

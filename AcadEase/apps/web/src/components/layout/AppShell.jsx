@@ -5,13 +5,17 @@ import {
   FileBadge, MessageSquareWarning, Bell, LogOut,
   GraduationCap, Menu, X, User, Users, Building2,
   BookOpen, Megaphone, BarChart2, ChevronDown,
+  ShieldCheck, UploadCloud, UserCheck,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api, { getAccessToken } from "../../api/client.js";
 
+// Keys are the normalized roles the API issues (college_admin / tnteu_admin);
+// the legacy admin / superadmin spellings are aliased at the bottom of this file.
 const NAV_BY_ROLE = {
   student: [
     { to: "/student/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
+    { to: "/student/admission",    label: "Admission",    icon: ShieldCheck },
     { to: "/student/attendance",   label: "Attendance",   icon: CalendarCheck },
     { to: "/student/results",      label: "Results",      icon: ClipboardList },
     { to: "/student/study-materials", label: "Study Materials", icon: BookOpen },
@@ -27,8 +31,12 @@ const NAV_BY_ROLE = {
     { to: "/faculty/od-requests",  label: "OD Requests",     icon: MessageSquareWarning },
     { to: "/admin/announcements",  label: "Announcements",   icon: Megaphone },
   ],
-  admin: [
-    { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
+  // University admin — their job is submitting applicant batches and tracking
+  // where each of their applicants sits in TNTEU's review.
+  college_admin: [
+    { to: "/admin/dashboard",              label: "Dashboard",       icon: LayoutDashboard },
+    { to: "/admin/admissions/upload",      label: "Bulk Submission", icon: UploadCloud },
+    { to: "/admin/admissions/applicants",  label: "Applicants",      icon: UserCheck },
     { to: "/admin/users",        label: "Users",        icon: Users },
     { to: "/admin/results",      label: "Results",      icon: ClipboardList },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
@@ -40,10 +48,13 @@ const NAV_BY_ROLE = {
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
-  superadmin: [
+  // TNTEU — the verification queue is the primary workspace, so it leads.
+  tnteu_admin: [
+    { to: "/admin/verification",           label: "Verification",  icon: ShieldCheck },
+    { to: "/admin/admissions/applicants",  label: "Applicants",    icon: UserCheck },
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
     { to: "/admin/users",        label: "Users",        icon: Users },
-    { to: "/admin/departments",  label: "Departments",  icon: Building2 },
+    { to: "/admin/departments",  label: "Universities", icon: Building2 },
     { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
     { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
@@ -53,6 +64,11 @@ const NAV_BY_ROLE = {
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
 };
+
+// Older tokens still spell these roles the pre-TNTEU way.
+NAV_BY_ROLE.admin = NAV_BY_ROLE.college_admin;
+NAV_BY_ROLE.college_coordinator = NAV_BY_ROLE.college_admin;
+NAV_BY_ROLE.superadmin = NAV_BY_ROLE.tnteu_admin;
 
 function getInitials(name = "") {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -71,7 +87,7 @@ export default function AppShell({ children }) {
   const [navExpanded, setNavExpanded] = useState(false);
   const studyMaterialsRoute = user?.role === "student" ? "/student/study-materials" : "/admin/study-materials";
   const profileRoute = user?.role === "student" ? "/student/profile" : user?.role === "faculty" ? "/faculty/profile" : "/admin/profile";
-  const compactNav = user?.role === "admin" || user?.role === "superadmin";
+  const compactNav = user?.role === "college_admin" || user?.role === "tnteu_admin";
   const primaryItems = compactNav ? items : items;
   const secondaryItems = [];
   const bellRef = useRef(null);

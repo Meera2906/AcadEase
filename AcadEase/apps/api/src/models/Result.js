@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const resultSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     studentId: { type: String, required: true, index: true },
     semester: { type: Number, required: true },
     academicYear: { type: String, required: true },

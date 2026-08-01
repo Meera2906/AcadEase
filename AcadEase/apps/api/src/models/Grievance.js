@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const grievanceSchema = new mongoose.Schema(
   {
+    collegeId: { type: String, required: true, index: true },
     studentId: { type: String, required: true, index: true },
     departmentId: { type: String, required: true, index: true },
     category: {

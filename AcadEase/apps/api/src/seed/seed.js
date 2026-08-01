@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import connectDB from "../config/db.js";
 import {
+  College,
   User,
   Department,
   Course,
@@ -29,6 +30,7 @@ const SEMESTER = 5;
 async function clearCollections() {
   await Promise.all(
     [
+      College,
       User,
       Department,
       Course,
@@ -48,29 +50,41 @@ async function clearCollections() {
   console.log("[seed] cleared existing collections");
 }
 
-async function seedDepartments() {
+async function seedColleges() {
+  const colleges = [
+    { collegeId: "TNTEU_COL_0417", name: "Kongu College of Education", affiliationCode: "0417", district: "Coimbatore", principalName: "Dr. B. Sathyabama", principalContact: "+91 98450 12345", bedSeats: 100, medSeats: 50, status: "active" },
+    { collegeId: "TNTEU_COL_0912", name: "Sankara Teacher Training College", affiliationCode: "0912", district: "Chennai", principalName: "Dr. R. Krishnamurthy", principalContact: "+91 93420 22334", bedSeats: 100, medSeats: 50, status: "active" },
+    { collegeId: "TNTEU_COL_1188", name: "Vellore B.Ed Academy", affiliationCode: "1188", district: "Vellore", principalName: "Mrs. J. Geetha", principalContact: "+91 90989 44990", bedSeats: 100, medSeats: 50, status: "active" },
+  ];
+  await College.insertMany(colleges);
+  console.log(`[seed] ${colleges.length} colleges`);
+  return colleges;
+}
+
+async function seedDepartments(collegeId) {
   const departments = [
-    { departmentId: "CSE_2024", institutionId: INSTITUTION_ID, name: "Computer Science and Engineering", code: "CSE" },
-    { departmentId: "ECE_2024", institutionId: INSTITUTION_ID, name: "Electronics and Communication Engineering", code: "ECE" },
-    { departmentId: "MECH_2024", institutionId: INSTITUTION_ID, name: "Mechanical Engineering", code: "MECH" },
+    { departmentId: "CSE_2024", collegeId, institutionId: INSTITUTION_ID, name: "Computer Science and Engineering", code: "CSE" },
+    { departmentId: "ECE_2024", collegeId, institutionId: INSTITUTION_ID, name: "Electronics and Communication Engineering", code: "ECE" },
+    { departmentId: "MECH_2024", collegeId, institutionId: INSTITUTION_ID, name: "Mechanical Engineering", code: "MECH" },
   ];
   await Department.insertMany(departments);
   console.log(`[seed] ${departments.length} departments`);
   return departments;
 }
 
-async function seedUsers() {
-  const passwordHash = await bcrypt.hash("Passw0rd!", 12);
+async function seedUsers(collegeId) {
+  const DEMO_PASSWORD = "Demo@2025";
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
   const faculty = [
-    { userId: "FAC_CSE_001", name: "Prof. Suresh Kumar", email: "suresh.kumar@tnteu.ac.in", departmentId: "CSE_2024", designation: "Assistant Professor", courseIds: ["CS301", "CS302"] },
-    { userId: "FAC_CSE_002", name: "Dr. Lakshmi Narayanan", email: "lakshmi.n@tnteu.ac.in", departmentId: "CSE_2024", designation: "Associate Professor", courseIds: ["CS303", "CS304"] },
-    { userId: "FAC_ECE_001", name: "Prof. Anitha Raman", email: "anitha.raman@tnteu.ac.in", departmentId: "ECE_2024", designation: "Assistant Professor", courseIds: ["CS305"] },
+    { userId: "FAC_CSE_001", name: "Prof. Suresh Kumar", email: "suresh.kumar@tnteu.ac.in", departmentId: "CSE_2024", designation: "Assistant Professor", courseIds: ["CS301", "CS302"], collegeId },
+    { userId: "FAC_CSE_002", name: "Dr. Lakshmi Narayanan", email: "lakshmi.n@tnteu.ac.in", departmentId: "CSE_2024", designation: "Associate Professor", courseIds: ["CS303", "CS304"], collegeId },
+    { userId: "FAC_ECE_001", name: "Prof. Anitha Raman", email: "anitha.raman@tnteu.ac.in", departmentId: "ECE_2024", designation: "Assistant Professor", courseIds: ["CS305"], collegeId },
   ];
 
   const admin = [
-    { userId: "ADM_CSE_001", name: "Mrs. Kavitha Selvam", email: "kavitha.selvam@tnteu.ac.in", departmentId: "CSE_2024", role: "admin", designation: "Department Office" },
-    { userId: "SUP_001", name: "Dr. R. Venkataraman", email: "registrar@tnteu.ac.in", departmentId: "CSE_2024", role: "superadmin", designation: "Registrar" },
+    { userId: "ADM_CSE_001", name: "Mrs. Kavitha Selvam", email: "kavitha.selvam@tnteu.ac.in", departmentId: "CSE_2024", role: "college_admin", designation: "College Office", collegeId },
+    { userId: "SUP_001", name: "Dr. R. Venkataraman", email: "registrar@tnteu.ac.in", departmentId: "CSE_2024", role: "tnteu_admin", designation: "Registrar", collegeId },
   ];
 
   const studentNames = [
@@ -103,35 +117,38 @@ async function seedUsers() {
     ...f,
     role: "faculty",
     institutionId: INSTITUTION_ID,
+    collegeId,
     passwordHash,
-    totpEnabled: false, // set up on first login per PRD 5.1.2
+    totpEnabled: false,
   }));
   const adminDocs = admin.map((a) => ({
     ...a,
     institutionId: INSTITUTION_ID,
+    collegeId,
     passwordHash,
     totpEnabled: false,
   }));
   const studentDocs = students.map((s) => ({
     ...s,
     institutionId: INSTITUTION_ID,
+    collegeId,
     passwordHash,
   }));
 
   await User.insertMany([...facultyDocs, ...adminDocs, ...studentDocs]);
   console.log(`[seed] ${facultyDocs.length} faculty, ${adminDocs.length} admin, ${studentDocs.length} students`);
-  console.log('[seed] all seeded accounts use password: "Passw0rd!"');
+  console.log('[seed] all seeded accounts use password: "Demo@2025"');
 
   return { faculty: facultyDocs, admin: adminDocs, students: studentDocs };
 }
 
-async function seedCourses() {
+async function seedCourses(collegeId) {
   const courses = [
-    { courseId: "CS301", name: "Database Management Systems", departmentId: "CSE_2024", facultyId: "FAC_CSE_001", semester: SEMESTER },
-    { courseId: "CS302", name: "Operating Systems", departmentId: "CSE_2024", facultyId: "FAC_CSE_001", semester: SEMESTER },
-    { courseId: "CS303", name: "Computer Networks", departmentId: "CSE_2024", facultyId: "FAC_CSE_002", semester: SEMESTER },
-    { courseId: "CS304", name: "Artificial Intelligence", departmentId: "CSE_2024", facultyId: "FAC_CSE_002", semester: SEMESTER },
-    { courseId: "CS305", name: "UI/UX Design Principles", departmentId: "ECE_2024", facultyId: "FAC_ECE_001", semester: SEMESTER },
+    { courseId: "CS301", name: "Database Management Systems", departmentId: "CSE_2024", facultyId: "FAC_CSE_001", semester: SEMESTER, collegeId },
+    { courseId: "CS302", name: "Operating Systems", departmentId: "CSE_2024", facultyId: "FAC_CSE_001", semester: SEMESTER, collegeId },
+    { courseId: "CS303", name: "Computer Networks", departmentId: "CSE_2024", facultyId: "FAC_CSE_002", semester: SEMESTER, collegeId },
+    { courseId: "CS304", name: "Artificial Intelligence", departmentId: "CSE_2024", facultyId: "FAC_CSE_002", semester: SEMESTER, collegeId },
+    { courseId: "CS305", name: "UI/UX Design Principles", departmentId: "ECE_2024", facultyId: "FAC_ECE_001", semester: SEMESTER, collegeId },
   ].map((c) => ({ ...c, institutionId: INSTITUTION_ID, academicYear: ACADEMIC_YEAR }));
 
   await Course.insertMany(courses);
@@ -139,11 +156,11 @@ async function seedCourses() {
   return courses;
 }
 
-async function seedEnrollments(students, courses) {
+async function seedEnrollments(students, courses, collegeId) {
   const enrollments = [];
   for (const s of students) {
     for (const c of courses) {
-      enrollments.push({ studentId: s.userId, courseId: c.courseId, academicYear: ACADEMIC_YEAR });
+      enrollments.push({ collegeId, studentId: s.userId, courseId: c.courseId, academicYear: ACADEMIC_YEAR });
     }
   }
   await Enrollment.insertMany(enrollments);
@@ -167,7 +184,7 @@ function weightedStatus(profile) {
   return "present";
 }
 
-async function seedAttendance(students, courses) {
+async function seedAttendance(students, courses, collegeId) {
   const records = [];
   const today = new Date();
   const weeks = 6;
@@ -190,6 +207,7 @@ async function seedAttendance(students, courses) {
           if (student.departmentId !== course.departmentId) continue;
           const status = weightedStatus(profiles[si]);
           records.push({
+            collegeId,
             courseId: course.courseId,
             studentId: student.userId,
             facultyId: course.facultyId,
@@ -280,14 +298,14 @@ async function seedAssessmentsAndMarks(students, courses) {
   console.log(`[seed] ${marks.length} mark entries`);
 }
 
-async function seedCertificates(students) {
+async function seedCertificates(students, collegeId) {
   const [s1, s2, s3, s4] = students;
 
   const requests = await CertificateRequest.insertMany([
-    { studentId: s1.userId, type: "bonafide", purpose: "Bank account opening", status: "approved" },
-    { studentId: s2.userId, type: "bonafide", purpose: "Scholarship application", status: "pending" },
-    { studentId: s3.userId, type: "completion", purpose: "Job application", status: "approved" },
-    { studentId: s4.userId, type: "attendance", purpose: "Internship documentation", status: "pending" },
+    { collegeId, studentId: s1.userId, type: "bonafide", purpose: "Bank account opening", status: "approved" },
+    { collegeId, studentId: s2.userId, type: "bonafide", purpose: "Scholarship application", status: "pending" },
+    { collegeId, studentId: s3.userId, type: "completion", purpose: "Job application", status: "approved" },
+    { collegeId, studentId: s4.userId, type: "attendance", purpose: "Internship documentation", status: "pending" },
   ]);
 
   // Fully issue one certificate so /verify/:certId has real data pre-seeded (PRD 9.3)
@@ -303,6 +321,7 @@ async function seedCertificates(students) {
   });
 
   const certificate = await Certificate.create({
+    collegeId,
     certId,
     studentId: s1.userId,
     type: "bonafide",
@@ -329,10 +348,11 @@ async function seedCertificates(students) {
   console.log(`[seed] verify it at GET /api/certificates/verify/${certId}`);
 }
 
-async function seedGrievances(students) {
+async function seedGrievances(students, collegeId) {
   const [s1, s2, s3] = students;
   await Grievance.insertMany([
     {
+      collegeId,
       studentId: s1.userId,
       departmentId: s1.departmentId,
       category: "Academic",
@@ -508,19 +528,20 @@ async function main() {
   await connectDB();
   await clearCollections();
 
-  await seedDepartments();
-  const { faculty, admin, students } = await seedUsers();
-  const courses = await seedCourses();
-  await seedEnrollments(students, courses);
-  await seedAttendance(students, courses);
+  const [college] = await seedColleges();
+  await seedDepartments(college.collegeId);
+  const { faculty, admin, students } = await seedUsers(college.collegeId);
+  const courses = await seedCourses(college.collegeId);
+  await seedEnrollments(students, courses, college.collegeId);
+  await seedAttendance(students, courses, college.collegeId);
   await seedOdRequests(students, courses);
   await seedAssessmentsAndMarks(students, courses);
   await seedSemesterResults(students);
-  await seedCertificates(students);
-  await seedGrievances(students);
+  await seedCertificates(students, college.collegeId);
+  await seedGrievances(students, college.collegeId);
   await seedNotificationsAndXp(students);
 
-  console.log("\n[seed] done. Demo logins (password for all: Passw0rd!):");
+  console.log("\n[seed] done. Demo logins (password for all: Demo@2025):");
   console.log(`  Student:   ${students[0].userId}`);
   console.log(`  Faculty:   ${faculty[0].userId}`);
   console.log(`  Admin:     ${admin[0].userId}`);

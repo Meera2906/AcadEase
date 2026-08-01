@@ -16,10 +16,10 @@ router.use(requireAuth);
 
 router.post("/", requireRole("student"), asyncHandler(submitGrievance));
 router.get("/student/:studentId", asyncHandler(getStudentGrievances));
-router.get("/", requireRole("admin", "superadmin"), asyncHandler(listGrievances));
-router.patch("/:id/acknowledge", requireRole("admin", "superadmin"), asyncHandler(acknowledgeGrievance));
-router.patch("/:id/resolve", requireRole("admin", "superadmin"), asyncHandler(resolveGrievance));
-router.patch("/:id/reject", requireRole("admin", "superadmin"), asyncHandler(rejectGrievance));
+router.get("/", requireRole("college_admin", "tnteu_admin"), asyncHandler(listGrievances));
+router.patch("/:id/acknowledge", requireRole("college_admin", "tnteu_admin"), asyncHandler(acknowledgeGrievance));
+router.patch("/:id/resolve", requireRole("college_admin", "tnteu_admin"), asyncHandler(resolveGrievance));
+router.patch("/:id/reject", requireRole("college_admin", "tnteu_admin"), asyncHandler(rejectGrievance));
 router.post("/:id/rating", requireRole("student"), asyncHandler(rateGrievance));
 
 export default router;

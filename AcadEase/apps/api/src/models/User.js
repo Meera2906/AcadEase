@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema(
     userId: { type: String, required: true, unique: true, index: true }, // STU_2021_CS_001, FAC_CSE_023, ADM_CSE_001
     role: {
       type: String,
-      enum: ["student", "faculty", "admin", "superadmin"],
+      enum: ["student", "faculty", "college_admin", "college_coordinator", "tnteu_admin", "admin", "superadmin"],
       required: true,
       index: true,
     },
@@ -18,8 +18,9 @@ const userSchema = new mongoose.Schema(
     totpSecret: { type: String, default: null },
     totpEnabled: { type: Boolean, default: false },
 
-    institutionId: { type: String, required: true, index: true },
-    departmentId: { type: String, required: true, index: true },
+    collegeId: { type: String, default: null, index: true },
+    institutionId: { type: String, default: null, index: true },
+    departmentId: { type: String, default: null, index: true },
 
     // Student-specific
     semester: { type: Number },
@@ -61,6 +62,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+userSchema.index({ collegeId: 1, departmentId: 1, role: 1 });
 userSchema.index({ institutionId: 1, departmentId: 1, role: 1 });
 
 export default mongoose.model("User", userSchema);

@@ -40,7 +40,7 @@ export default function StudyMaterialsPage() {
     else setActiveTab("academic");
   }, [location.search]);
 
-  const canManage = user?.role === "admin" || user?.role === "superadmin" || user?.role === "faculty";
+  const canManage = user?.role === "college_admin" || user?.role === "tnteu_admin" || user?.role === "faculty";
   const quickLinkMaterials = materials.filter((item) => {
     if (!item?.filePath) return false;
     // Show if contentType explicitly marked, or title/description mentions syllabus/guide
