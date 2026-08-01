@@ -7,6 +7,27 @@ import { generateTotpSecret, getTotpOtpauthUrl, verifyTotpToken } from "../utils
 const LOCK_THRESHOLD = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes, per PRD 5.1.2
 
+// Deployed, the SPA and the API sit on different origins (Vercel and Render),
+// which makes every cookie a third-party cookie. SameSite=Lax silently refuses
+// to send those, so the refresh cookie never arrives and every session dies at
+// the first token refresh — locally it all works, in production nobody stays
+// logged in. SameSite=None is the fix, and browsers only accept it over HTTPS,
+// so it must travel with Secure.
+//
+// Set COOKIE_CROSS_SITE=false if you ever serve the SPA from the API's origin.
+export function cookieOptions() {
+  const crossSite = process.env.COOKIE_CROSS_SITE
+    ? process.env.COOKIE_CROSS_SITE !== "false"
+    : process.env.NODE_ENV === "production";
+
+  return {
+    secure: crossSite || process.env.NODE_ENV === "production",
+    sameSite: crossSite ? "none" : "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
+
 function staffRequires2fa(role) {
   const normalized = role === "admin" ? "college_admin" : role === "superadmin" ? "tnteu_admin" : role;
   return ["faculty", "college_admin", "college_coordinator", "tnteu_admin"].includes(normalized);
@@ -121,20 +142,8 @@ async function issueTokens(res, user) {
   user.lastLogin = new Date();
   await user.save();
 
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-  res.cookie("csrfToken", csrfToken, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("refreshToken", refreshToken, { httpOnly: true, ...cookieOptions() });
+  res.cookie("csrfToken", csrfToken, { httpOnly: false, ...cookieOptions() });
 
   return res.json({
     accessToken,
@@ -170,13 +179,7 @@ export async function refresh(req, res) {
 
   const accessToken = signAccessToken(user);
   const csrfToken = crypto.randomBytes(32).toString("hex");
-  res.cookie("csrfToken", csrfToken, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("csrfToken", csrfToken, { httpOnly: false, ...cookieOptions() });
   return res.json({ accessToken });
 }
 
@@ -191,8 +194,9 @@ export async function logout(req, res) {
       /* token already invalid — nothing to clean up */
     }
   }
-  res.clearCookie("refreshToken");
-  res.clearCookie("csrfToken");
+  const { maxAge, ...clearOptions } = cookieOptions();
+  res.clearCookie("refreshToken", clearOptions);
+  res.clearCookie("csrfToken", clearOptions);
   return res.json({ message: "Logged out" });
 }
 

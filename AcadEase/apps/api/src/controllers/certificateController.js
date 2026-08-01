@@ -519,8 +519,23 @@ export async function verifyCertificate(req, res) {
   // in what order, and whether each signature still matches what it signed.
   // The approval links bind to the request; the final issuance link binds to
   // the certificate itself, so both subjects are permitted in this chain.
+  // A reissued certificate inherits the links signed for the certificate it
+  // replaced — the university's original approval is exactly what we do not
+  // want to throw away. Those links legitimately name an ancestor certId, so
+  // the whole supersession lineage is permitted as a subject. Walking the
+  // lineage from the database (rather than trusting the link's own claim) is
+  // what stops a signature being lifted off an unrelated certificate.
+  const lineage = [];
+  let ancestor = cert.supersedes;
+  for (let hop = 0; ancestor && hop < 10; hop += 1) {
+    lineage.push(ancestor);
+    const previous = await Certificate.findOne({ certId: ancestor }).select("supersedes").lean();
+    ancestor = previous?.supersedes || null;
+  }
+
   const chain = verifyChain(cert.approvalChain || [], "certificate_request", String(cert.requestId), [
     ["certificate", cert.certId],
+    ...lineage.map((id) => ["certificate", id]),
   ]);
   const issuerCheck = chain.links.find((link) => link.stage === "issued") || null;
 
@@ -532,9 +547,18 @@ export async function verifyCertificate(req, res) {
   const isActive = cert.status === "active" && signatureValid && chainValid;
 
   // Only the minimal, non-sensitive fields per PRD 5.4.4 — no marks, no attendance, no contact info.
+  // A superseded certificate is not a forgery and must not read like one: the
+  // record behind it was corrected and a replacement was issued. Whoever
+  // scanned this QR is pointed at the current certificate instead.
+  const superseded = cert.status === "revoked" && cert.revocationType === "superseded";
+
   res.json({
     verified: isActive,
     status: cert.status,
+    revocationType: cert.revocationType || null,
+    superseded,
+    supersededBy: cert.supersededBy || null,
+    supersedes: cert.supersedes || null,
     studentName: cert.studentName,
     certificateType: cert.type,
     issueDate: cert.issuedAt,
@@ -563,6 +587,8 @@ export async function verifyCertificate(req, res) {
     issuerSignatureValid: issuerCheck ? issuerCheck.valid : null,
     message: isActive
       ? `Certificate verified. Authorised by ${chain.links.length} institutional signature(s).`
+      : superseded
+        ? `This certificate was superseded after the record it was issued from was corrected. A replacement (${cert.supersededBy}) was issued and is the current valid certificate.`
       : cert.status === "revoked"
         ? "This certificate has been revoked by the institution."
         : !chainValid
@@ -580,6 +606,7 @@ export async function revokeCertificate(req, res) {
   if (cert.status === "revoked") return res.status(409).json({ error: "Certificate already revoked" });
 
   cert.status = "revoked";
+  cert.revocationType = "manual";
   cert.revokedAt = new Date();
   cert.revokedBy = req.user.userId;
   cert.revokedReason = reason || "";

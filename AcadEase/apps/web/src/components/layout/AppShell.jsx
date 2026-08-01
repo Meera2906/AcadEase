@@ -51,6 +51,7 @@ const NAV_BY_ROLE = {
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
     { to: "/admin/circulars",    label: "Circulars",    icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
+    { to: "/admin/analytics",    label: "University Analytics", icon: BarChart2 },
   ],
   // TNTEU — the regulator, not a college office. The verification queue leads
   // because it is the primary workspace; the day-to-day academic modules
@@ -65,6 +66,7 @@ const NAV_BY_ROLE = {
     { to: "/admin/umis",         label: "Student Data", icon: Database },
     { to: "/admin/circulars",    label: "Circulars",    icon: Megaphone },
     { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
+    { to: "/admin/analytics",    label: "University Analytics", icon: BarChart2 },
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
     { to: "/admin/users",        label: "Users",        icon: Users },
     { to: "/admin/departments",  label: "Universities", icon: Building2 },

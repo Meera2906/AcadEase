@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle, XCircle, AlertTriangle, GraduationCap, ShieldCheck } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, GraduationCap, ShieldCheck, RefreshCw } from "lucide-react";
 import api from "../../api/client.js";
 
 export default function CertVerify() {
@@ -16,7 +16,11 @@ export default function CertVerify() {
   }, [certId]);
 
   const isValid   = result?.verified === true;
-  const isRevoked = result?.status === "revoked";
+  // A superseded certificate is not a withdrawn one: the record behind it was
+  // corrected and a replacement was issued. Showing both the same way would
+  // wrongly imply the student did something wrong.
+  const isSuperseded = result?.superseded === true;
+  const isRevoked = result?.status === "revoked" && !isSuperseded;
   const signatureValid = result?.signatureValid !== false;
 
   return (
@@ -32,15 +36,18 @@ export default function CertVerify() {
       <div className="w-full max-w-md bg-card border border-border rounded-card shadow-lift overflow-hidden">
         {/* Status header */}
         <div className={`px-6 py-6 text-center ${
-          loading   ? "bg-paper" :
-          isValid   ? "bg-[#E9FCE0]" :
-          isRevoked ? "bg-[#FFE7E9]" :
-                      "bg-[#FFF3DC]"
+          loading      ? "bg-paper" :
+          isValid      ? "bg-[#E9FCE0]" :
+          isSuperseded ? "bg-[#E8ECFF]" :
+          isRevoked    ? "bg-[#FFE7E9]" :
+                         "bg-[#FFF3DC]"
         }`}>
           {loading ? (
             <div className="w-12 h-12 rounded-full bg-[#EFEBDF] animate-pulse mx-auto mb-3" />
           ) : isValid ? (
             <CheckCircle size={48} className="text-success mx-auto mb-2" />
+          ) : isSuperseded ? (
+            <RefreshCw size={48} className="text-signal mx-auto mb-2" />
           ) : isRevoked ? (
             <XCircle size={48} className="text-danger mx-auto mb-2" />
           ) : (
@@ -48,15 +55,17 @@ export default function CertVerify() {
           )}
 
           <p className={`font-display text-lg font-bold ${
-            loading   ? "text-text-muted" :
-            isValid   ? "text-success" :
-            isRevoked ? "text-danger" :
-                        "text-warning"
+            loading      ? "text-text-muted" :
+            isValid      ? "text-success" :
+            isSuperseded ? "text-signal" :
+            isRevoked    ? "text-danger" :
+                           "text-warning"
           }`}>
-            {loading    ? "Verifying…" :
-             isValid    ? "Certificate Valid" :
-             isRevoked  ? "Certificate Revoked" :
-                          "Not Found"}
+            {loading      ? "Verifying…" :
+             isValid      ? "Certificate Valid" :
+             isSuperseded ? "Superseded — a corrected certificate was issued" :
+             isRevoked    ? "Certificate Revoked" :
+                            "Not Found"}
           </p>
 
           {!loading && !isValid && (
@@ -65,6 +74,15 @@ export default function CertVerify() {
                 ? "This certificate has been revoked by the institution."
                 : result?.message || "This certificate could not be verified."}
             </p>
+          )}
+
+          {!loading && isSuperseded && result?.supersededBy && (
+            <a
+              href={`/verify/${result.supersededBy}`}
+              className="inline-block mt-3 text-xs font-semibold text-signal underline break-all"
+            >
+              Verify the replacement certificate →
+            </a>
           )}
         </div>
 

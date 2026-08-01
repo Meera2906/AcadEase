@@ -25,6 +25,37 @@ const grievanceSchema = new mongoose.Schema(
     resolvedAt: { type: Date, default: null },
     satisfactionRating: { type: Number, min: 1, max: 5, default: null },
     resubmittedFrom: { type: mongoose.Schema.Types.ObjectId, ref: "Grievance", default: null },
+
+    // Which academic record this grievance disputes. Only a grievance that
+    // names a record can trigger the certificate reissue below — a complaint
+    // about a broken projector must never touch anyone's certificates.
+    relatedRecord: {
+      kind: { type: String, enum: ["result", "marks", "attendance"], default: null },
+      resultId: { type: mongoose.Schema.Types.ObjectId, ref: "Result", default: null },
+      semester: { type: Number, default: null },
+      academicYear: { type: String, default: null },
+      courseId: { type: String, default: null },
+    },
+
+    // What the resolution did to certificates issued from the disputed record.
+    // Written by the reissue engine, never by hand, so the grievance itself
+    // carries the proof of what was superseded and by what.
+    certificateActions: {
+      type: [
+        new mongoose.Schema(
+          {
+            oldCertId: { type: String, required: true },
+            newCertId: { type: String, default: null },
+            certificateType: { type: String, required: true },
+            action: { type: String, enum: ["revoked_and_reissued", "revoked_only", "failed"], required: true },
+            detail: { type: String, default: "" },
+            at: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

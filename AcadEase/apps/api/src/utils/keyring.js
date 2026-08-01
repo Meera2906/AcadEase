@@ -34,13 +34,49 @@ function passphrase() {
   return secret;
 }
 
+function safeKeyId(keyId) {
+  return String(keyId).replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
 function keyPaths(keyId) {
-  const safe = String(keyId).replace(/[^A-Za-z0-9_-]/g, "_");
+  const safe = safeKeyId(keyId);
   const dir = keyDir();
   return {
     publicPath: path.join(dir, `${safe}.pub.pem`),
     privatePath: path.join(dir, `${safe}.key.pem`),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Keys from the environment.
+//
+// On a host with an ephemeral filesystem (Render's free tier, most container
+// platforms) anything written to secure-storage/keys is gone at the next
+// deploy. A fresh key pair would then be generated on demand — and every
+// certificate ever signed under the old key would start reporting itself as
+// forged to anyone who scanned it. That is a silent, unrecoverable failure.
+//
+// So a key pair may instead be supplied as base64-encoded PEM in the
+// environment, which survives redeploys:
+//
+//   KEY_TNTEU_PRIVATE / KEY_TNTEU_PUBLIC
+//   KEY_TNTEU_COL_0417_PRIVATE / KEY_TNTEU_COL_0417_PUBLIC
+//
+// Generate them with:  node scripts/export-keys.mjs
+// ---------------------------------------------------------------------------
+function envKey(keyId, half) {
+  const raw = process.env[`KEY_${safeKeyId(keyId).toUpperCase()}_${half}`];
+  if (!raw) return null;
+  const text = raw.trim();
+  // Accept both raw PEM (multi-line) and base64-wrapped PEM, because dashboards
+  // differ in how kindly they treat newlines in a value.
+  if (text.includes("-----BEGIN")) return text.replace(/\\n/g, "\n");
+  try {
+    const decoded = Buffer.from(text, "base64").toString("utf8");
+    return decoded.includes("-----BEGIN") ? decoded : null;
+  } catch {
+    return null;
+  }
 }
 
 // Generated on first use, so onboarding a college needs no key ceremony.
@@ -84,6 +120,9 @@ export function ensureKeyPair(keyId) {
 // Verification needs the public half only — and deliberately does not need the
 // passphrase. Anyone can check a signature; only the key holder can make one.
 export function loadPublicKey(keyId) {
+  const fromEnv = envKey(keyId, "PUBLIC");
+  if (fromEnv) return crypto.createPublicKey(fromEnv);
+
   const { publicPath } = keyPaths(keyId);
   if (fs.existsSync(publicPath)) {
     return crypto.createPublicKey(fs.readFileSync(publicPath, "utf8"));
@@ -92,11 +131,22 @@ export function loadPublicKey(keyId) {
 }
 
 export function loadPrivateKey(keyId) {
+  const fromEnv = envKey(keyId, "PRIVATE");
+  if (fromEnv) {
+    return crypto.createPrivateKey({ key: fromEnv, passphrase: passphrase() });
+  }
+
   const { privatePath } = ensureKeyPair(keyId);
   return crypto.createPrivateKey({
     key: fs.readFileSync(privatePath, "utf8"),
     passphrase: passphrase(),
   });
+}
+
+// True when this key is pinned in the environment and therefore survives a
+// redeploy. Surfaced by /health so a deployment can be checked at a glance.
+export function keyIsPinned(keyId) {
+  return Boolean(envKey(keyId, "PRIVATE") && envKey(keyId, "PUBLIC"));
 }
 
 // A stable fingerprint of the public key, printed on certificates so a holder

@@ -24,6 +24,10 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 const app = express();
 
 app.disable("x-powered-by");
+// Render (and every other PaaS) terminates TLS at a proxy. Without this Express
+// sees plain HTTP, refuses to set Secure cookies, and the rate limiter buckets
+// every request under the proxy's single IP.
+app.set("trust proxy", 1);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
@@ -33,9 +37,31 @@ app.use(helmet({
     },
   },
 }));
+// One deployment usually has more than one legitimate front-end origin: the
+// production domain, Vercel's per-branch preview URLs, and localhost while
+// somebody is debugging against the deployed API. CLIENT_URL takes a
+// comma-separated list; ALLOW_VERCEL_PREVIEWS opens up *.vercel.app.
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowVercelPreviews = process.env.ALLOW_VERCEL_PREVIEWS === "true";
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // curl, server-to-server, same-origin navigations
+  const clean = origin.replace(/\/$/, "");
+  if (allowedOrigins.includes(clean)) return true;
+  if (allowVercelPreviews && /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(clean)) return true;
+  return false;
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: (origin, callback) =>
+      isAllowedOrigin(origin)
+        ? callback(null, true)
+        : callback(new Error(`Origin ${origin} is not allowed by CORS`)),
     credentials: true,
   })
 );
@@ -76,7 +102,30 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50 });
 app.use("/api/auth", authLimiter);
 
-app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+// Render pings this to keep the service marked healthy. It also answers the
+// two questions that actually go wrong on a fresh deploy: is the database
+// reachable, and are the signing keys pinned to the environment (rather than
+// living on a disk that the next deploy will wipe)?
+app.get("/health", async (req, res) => {
+  const { default: mongoose } = await import("mongoose");
+  const { keyIsPinned, TNTEU_KEY_ID } = await import("./utils/keyring.js");
+
+  const dbStates = ["disconnected", "connected", "connecting", "disconnecting"];
+  const signingKeyPinned = (() => {
+    try { return keyIsPinned(TNTEU_KEY_ID); } catch { return false; }
+  })();
+
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    database: dbStates[mongoose.connection.readyState] || "unknown",
+    signingKeyPinned,
+    allowedOrigins,
+    warning: signingKeyPinned
+      ? undefined
+      : "Signing keys are on the local filesystem. On an ephemeral host they will be regenerated on the next deploy and every certificate already issued will fail verification. See scripts/export-keys.mjs.",
+  });
+});
 
 // Sensitive files are no longer exposed anonymously. Authenticated users can still access them
 // via the secure file endpoint within the API, and direct /storage access is limited to logged-in users.

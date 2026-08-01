@@ -41,6 +41,18 @@ const certificateSchema = new mongoose.Schema(
     revokedBy: { type: String, default: null },
     revokedReason: { type: String, default: "" },
 
+    // A certificate is revoked for one of two reasons, and the difference
+    // matters to whoever scans the QR: "manual" means the institution withdrew
+    // it, "superseded" means the record behind it was corrected and a
+    // replacement was issued. The latter is never a black mark on the student.
+    revocationType: { type: String, enum: ["manual", "superseded"], default: null },
+    // Set on the old certificate: the replacement that took its place.
+    supersededBy: { type: String, default: null },
+    // Set on the new certificate: the one it replaced.
+    supersedes: { type: String, default: null },
+    // The grievance whose resolution triggered the reissue, if any.
+    reissuedFromGrievance: { type: mongoose.Schema.Types.ObjectId, ref: "Grievance", default: null },
+
     // Download
     pdfPath: { type: String, required: true }, // server-side storage path
     downloadUrlToken: { type: String, default: null }, // signed, short-lived

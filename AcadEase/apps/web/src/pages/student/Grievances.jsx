@@ -17,7 +17,8 @@ export default function StudentGrievances() {
   const [loading, setLoading]       = useState(true);
   const [expanded, setExpanded]     = useState(null);
   const [showForm, setShowForm]     = useState(false);
-  const [form, setForm]             = useState({ category: "", subject: "", description: "" });
+  const [form, setForm]             = useState({ category: "", subject: "", description: "", relatedResultId: "" });
+  const [results, setResults]       = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const { toast, showToast, clearToast } = useToast();
 
@@ -29,16 +30,36 @@ export default function StudentGrievances() {
   useEffect(() => {
     if (!user) return;
     load().finally(() => setLoading(false));
+    // A grievance about a mark can name the result it disputes. That link is
+    // what lets the resolution reissue any certificate built on that result.
+    api.get(`/results/student/${user.userId}`)
+      .then((r) => setResults(r.data.results || []))
+      .catch(() => setResults([]));
   }, [user]);
 
   async function submitGrievance(e) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/grievances", form);
+      const chosen = results.find((r) => r._id === form.relatedResultId);
+      await api.post("/grievances", {
+        category: form.category,
+        subject: form.subject,
+        description: form.description,
+        ...(chosen
+          ? {
+              relatedRecord: {
+                kind: "result",
+                resultId: chosen._id,
+                semester: chosen.semester,
+                academicYear: chosen.academicYear,
+              },
+            }
+          : {}),
+      });
       showToast("Grievance submitted successfully.", "success");
       setShowForm(false);
-      setForm({ category: "", subject: "", description: "" });
+      setForm({ category: "", subject: "", description: "", relatedResultId: "" });
       await load();
     } catch (err) {
       showToast(err.response?.data?.error || "Failed to submit grievance.", "error");
@@ -184,6 +205,26 @@ export default function StudentGrievances() {
                 <label className="label">Subject</label>
                 <input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="input" />
               </div>
+              {form.category === "Academic" && results.length > 0 && (
+                <div>
+                  <label className="label">Which result is this about? (optional)</label>
+                  <select
+                    value={form.relatedResultId}
+                    onChange={(e) => setForm({ ...form, relatedResultId: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Not about a specific result</option>
+                    {results.map((r) => (
+                      <option key={r._id} value={r._id}>
+                        Semester {r.semester} — {r.academicYear}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-text-muted mt-1">
+                    Naming the result lets us reissue any certificate built on it if the record is corrected.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="label">Description</label>
                 <textarea required maxLength={500} rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input" />

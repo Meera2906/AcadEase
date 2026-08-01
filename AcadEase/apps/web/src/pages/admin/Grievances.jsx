@@ -14,6 +14,8 @@ export default function AdminGrievances() {
   const [filter, setFilter]         = useState("all");
   const [loading, setLoading]       = useState(true);
   const [notes, setNotes]           = useState({});
+  const [corrected, setCorrected]   = useState({});
+  const [impact, setImpact]         = useState({});
   const [processing, setProcessing] = useState(null);
   const { toast, showToast, clearToast } = useToast();
   const navigate = useNavigate();
@@ -22,15 +24,35 @@ export default function AdminGrievances() {
     const params = filter !== "all" ? `?status=${encodeURIComponent(filter)}` : "";
     const res = await api.get(`/grievances${params}`);
     setGrievances(res.data.grievances);
+    return res.data.grievances;
   }
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [filter]);
 
+  // For any grievance that names an academic record, ask the server what
+  // resolving it would do to that student's certificates — the admin should see
+  // the consequence before they press the button, not after.
+  useEffect(() => {
+    grievances
+      .filter((g) => g.status === "In Review" && g.relatedRecord?.kind && impact[g._id] === undefined)
+      .forEach((g) => {
+        api.get(`/grievances/${g._id}/certificate-impact`)
+          .then((r) => setImpact((prev) => ({ ...prev, [g._id]: r.data })))
+          .catch(() => setImpact((prev) => ({ ...prev, [g._id]: null })));
+      });
+  }, [grievances]);
+
   async function action(id, endpoint, body = {}) {
     setProcessing(id + endpoint);
     try {
-      await api.patch(`/grievances/${id}/${endpoint}`, body);
-      showToast("Updated successfully.", "success");
+      const res = await api.patch(`/grievances/${id}/${endpoint}`, body);
+      const reissued = (res.data?.certificateActions || []).filter((a) => a.action === "revoked_and_reissued");
+      showToast(
+        reissued.length
+          ? `Resolved. ${reissued.length} certificate(s) superseded and reissued.`
+          : "Updated successfully.",
+        "success"
+      );
       await load();
     } catch (err) {
       showToast(err.response?.data?.error || "Action failed.", "error");
@@ -109,8 +131,46 @@ export default function AdminGrievances() {
                     rows={2}
                     className="input"
                   />
+                  {/* Only shown when the grievance disputes an academic record
+                      a certificate could have been issued from. */}
+                  {g.relatedRecord?.kind && (
+                    <label className="flex items-start gap-2.5 bg-[#FFF3DC] border border-warning/30 rounded-card px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!corrected[g._id]}
+                        onChange={(e) => setCorrected((prev) => ({ ...prev, [g._id]: e.target.checked }))}
+                        className="mt-0.5"
+                      />
+                      <span className="text-xs text-text-secondary leading-relaxed">
+                        <span className="font-semibold text-text-primary">
+                          The {g.relatedRecord.kind} record was corrected
+                        </span>{" "}
+                        (not just explained).
+                        {impact[g._id]?.certificates?.length > 0 ? (
+                          <span className="block mt-1 text-warning font-medium">
+                            {impact[g._id].certificates.length} active certificate(s)
+                            {" "}({impact[g._id].certificates.map((c) => c.type).join(", ")}) were issued from this
+                            record. Resolving with this ticked revokes them as <em>superseded</em> and issues
+                            signed replacements automatically.
+                          </span>
+                        ) : (
+                          <span className="block mt-1 text-text-muted">
+                            {impact[g._id]?.note || "Checking which certificates this affects…"}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  )}
+
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => action(g._id, "resolve", { resolutionNote: notes[g._id] || "" })} disabled={!!processing}>
+                    <Button
+                      size="sm"
+                      onClick={() => action(g._id, "resolve", {
+                        resolutionNote: notes[g._id] || "",
+                        recordCorrected: !!corrected[g._id],
+                      })}
+                      disabled={!!processing}
+                    >
                       {processing === g._id + "resolve" ? "Resolving…" : "Resolve"}
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => action(g._id, "reject", { reason: notes[g._id] || "" })} disabled={!!processing}>
@@ -124,6 +184,22 @@ export default function AdminGrievances() {
                 <div className="mt-3 bg-[#E9FCE0] rounded-card px-3 py-2.5">
                   <p className="text-xs font-semibold text-success mb-1">Resolution</p>
                   <p className="text-sm text-text-secondary">{g.resolutionNote}</p>
+                </div>
+              )}
+
+              {g.certificateActions?.length > 0 && (
+                <div className="mt-3 bg-[#E8ECFF] rounded-card px-3 py-2.5">
+                  <p className="text-xs font-semibold text-signal mb-1.5">Certificates corrected</p>
+                  <ul className="space-y-1">
+                    {g.certificateActions.map((a) => (
+                      <li key={a.oldCertId} className="text-xs text-text-secondary">
+                        <span className="capitalize font-medium">{a.certificateType}</span>:{" "}
+                        <span className="font-mono">{a.oldCertId.slice(0, 8)}…</span> superseded
+                        {a.newCertId && <> → reissued as <span className="font-mono">{a.newCertId.slice(0, 8)}…</span></>}
+                        {a.action === "failed" && <span className="text-danger"> — reissue failed: {a.detail}</span>}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
