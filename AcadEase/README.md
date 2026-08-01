@@ -6,6 +6,64 @@ TNTEU now operates as a multi-tenant academic platform: one read-only `college_c
 
 ---
 
+## The three features we are building
+
+TNTEU is a affiliating university: it does not teach students directly. Colleges
+do. Everything TNTEU actually does is **paperwork arriving from somewhere else
+that a human then has to check**. All three of our features attack the same
+bottleneck at three different points in that pipeline.
+
+### 1. Admission document verification at scale — *intake*
+
+**The problem.** Colleges send TNTEU the admission proofs of every applicant.
+TNTEU teaching staff cross-check each document by hand against a checklist.
+That manual pass is the bottleneck, and it does not scale with intake.
+
+**What we built.** A structured verification queue, sorted flagged-first.
+Deterministic rule-based checks (duplicate file hash system-wide, missing
+fields, name mismatch, lapsed dates) run at upload and tell the reviewer where
+to look. OCR pre-fills the fields so they confirm rather than transcribe.
+Applicants can also apply directly, with every check running in seconds while
+they are still at their desk.
+
+**The measurable claim.** Per-document review time falls from minutes to
+seconds, because the reviewer stops reading and starts confirming.
+**Nothing is auto-approved** — see *Why there is no AI approving documents*.
+
+### 2. University ↔ TNTEU governance requests — *administration*
+
+**The problem.** Affiliation renewals, seat matrix revisions, new programme
+approvals, faculty recognition, exam centre designation. Today these move by
+letter, email and follow-up phone call, with no shared view of what is pending
+or how long it has been sitting there.
+
+**What we built.** Colleges raise a typed request, attach encrypted supporting
+documents, and submit. TNTEU works a single prioritised queue, can ask for
+clarification in-thread, and approves or rejects with a **digitally signed
+order** the college can show to anyone. Turnaround time is measured, not
+guessed.
+
+### 3. Counter-signed certificates — *output*
+
+**The problem.** A certificate is only worth what a stranger can check. And a
+certificate that matters — a merit certificate — is authorised by two different
+institutions, so it needs to carry proof of both.
+
+**What we built.** A student requests → their university approves → TNTEU
+counter-signs → the PDF is generated automatically and travels back down the
+chain to the student. **Each stage adds its own RSA-PSS signature**, chained so
+that removing, reordering or editing any stage invalidates everything after it.
+Anyone can verify the whole chain by scanning the QR code, with no login.
+
+|  | Intake | Administration | Output |
+| --- | --- | --- | --- |
+| Who initiates | Applicant / college | College | Student |
+| Who decides | TNTEU reviewer | TNTEU | College, then TNTEU |
+| What we removed | Manual cross-checking | Letters and phone calls | "Is this real?" |
+| Proof it works | 49 + 59 e2e assertions | 21 e2e assertions | 39 e2e assertions |
+
+---
+
 ## The problem this solves
 
 Universities affiliated to TNTEU send admission proofs — marksheets, transfer
@@ -97,6 +155,37 @@ This is the part most easily overclaimed, so it is worth being precise.
 - **No QR is not a red flag.** Most Indian certificates in circulation predate
   QR codes. Flagging their absence would flag nearly every document and make the
   flagged-first queue ordering meaningless.
+
+### Counter-signatures: why not the HMAC we already had
+
+The original certificate code signed with an HMAC. An HMAC is **symmetric** —
+the same secret both creates and checks it. Every party able to verify a
+certificate could equally well mint a fake one, and the "authorised signatory"
+line meant nothing beyond "somebody with database access wrote it".
+
+The approval chain uses **RSA-PSS-SHA256** with one key pair per institution
+(`tnteu`, plus one per college). Only the holder of a private key can produce
+its signature; anyone at all — including a stranger scanning a QR code with no
+login — can verify it. That asymmetry is what "non-spoofable" actually requires.
+
+Each link signs over its own facts **plus the signature of the link before it**:
+
+```
+link 0  university  signs { subject, stage, decision, actor, remarks, time, previous: "genesis" }
+link 1  TNTEU       signs { …, previous: <link 0 signature> }
+link 2  TNTEU       signs { subject: the issued certificate, …, previous: <link 1 signature> }
+```
+
+So a rejection reason cannot be rewritten, an approval cannot be back-dated, a
+stage cannot be removed or reordered, a college cannot manufacture TNTEU's
+counter-signature, and a signature cannot be lifted onto a different record.
+Each of those is a test in `test/approvalChain.test.js`.
+
+One consequence worth knowing: if an institution's private key is lost, the
+system **refuses to silently generate a replacement**, because doing so would
+rotate the key out from under every signature ever issued with it — every
+historical certificate would start reporting itself as forged. It fails loudly
+and tells you to restore from backup.
 
 ### Encryption at rest
 
@@ -345,6 +434,7 @@ HTTP server:
 | --- | --- | --- |
 | `apps/api/e2e-admissions.mjs` | Bulk import report, flag detection, tenant isolation, queue ordering, the checklist gate, rejection reasons, the enrolment gate, DB-layer aggregation, audit trail | 49 |
 | `apps/api/e2e-preadmission.mjs` | Applicant registration and token isolation, every instant check, QR authenticity across 8 cases, encryption at rest and who can decrypt, tamper detection, the eligibility gate, drafts staying out of the queue, handover to a student account | 59 |
+| `apps/api/e2e-signedflow.mjs` | University→TNTEU requests (drafts, clarification thread, signed orders, tenant isolation) and the counter-signed merit certificate chain (merit threshold, stage ordering, both signatures, auto-generation, public verification, tamper detection) | 60 |
 
 Both are **destructive** — they reset the demo applicants and their documents,
 so point them at a dev database only. `npm test` runs the 34 unit tests, which
@@ -353,6 +443,37 @@ are non-destructive and need no database.
 Deliberate demo detail: **APP_2025_005** in the bulk package has a UG
 percentage of 43.5% at the BC rate, so even after documents are verified they
 are blocked at enrolment by the eligibility gate.
+
+## Demo path C — university applies to TNTEU (2 minutes)
+
+1. **ADM_CSE_001** → *TNTEU Requests* → *New request* → "Seat matrix revision",
+   describe the ask → creates a **draft**. TNTEU cannot see drafts.
+2. Attach a supporting document — it is encrypted on upload, and the row shows
+   who holds a key to open it.
+3. *Submit to TNTEU*.
+4. **SUP_001** → *College Requests* → open it → *Ask for more* → the college
+   sees the question in the thread and replies.
+5. *Approve* with a note → a **signed order** is produced. Reload as the college:
+   the decision panel shows the signature, the key fingerprint, and
+   "Signature verified".
+
+## Demo path D — counter-signed merit certificate (3 minutes)
+
+1. Log in as a student with published results → *Certificates* → request a
+   **merit** certificate. If they are under 75% or carrying arrears, the server
+   refuses and says why.
+2. The stage trail shows `Requested › University approval › TNTEU
+   counter-signature › Issued`.
+3. **ADM_CSE_001** → *Certificates* → the request is in "Awaiting your
+   approval" → *Approve & send to TNTEU*. No certificate exists yet.
+4. **SUP_001** → *Certificates* → now in "Awaiting your counter-signature" →
+   *Counter-sign & issue*. The PDF is generated automatically, carrying a
+   counter-signature block naming both institutions.
+5. The student downloads it and scans the QR → the public verify page lists the
+   full chain of authorisation with each signature independently re-checked.
+6. To show it is real: edit one approval in the database and reload the verify
+   page — it flips to *"the approval chain has been altered since it was
+   issued"*.
 
 ---
 

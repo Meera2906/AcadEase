@@ -24,6 +24,18 @@ const certificateSchema = new mongoose.Schema(
 
     // Anti-spoofing (see docs/PRD Section 9)
     hmacSignature: { type: String, required: true }, // HMAC-SHA256(certId+studentId+issuedAt+type+institutionId)
+
+    // The counter-signature chain, snapshotted at issue. Each link is an
+    // RSA-PSS signature by one institution over its own decision plus the
+    // signature before it, so the order and content of the approvals cannot be
+    // altered after the fact. Unlike the HMAC above, these can be verified by
+    // anyone without giving them the power to forge one.
+    approvalChain: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // TNTEU's signature over the finished certificate itself.
+    issuerSignature: { type: String, default: null },
+    issuerKeyId: { type: String, default: null },
+    issuerKeyFingerprint: { type: String, default: null },
+    signatureAlgorithm: { type: String, default: null },
     status: { type: String, enum: ["active", "revoked"], default: "active" },
     revokedAt: { type: Date, default: null },
     revokedBy: { type: String, default: null },

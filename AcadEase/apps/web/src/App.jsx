@@ -28,6 +28,8 @@ import AdmissionsUpload from "./pages/admin/AdmissionsUpload.jsx";
 import AdmissionsApplicants from "./pages/admin/AdmissionsApplicants.jsx";
 import AdmissionsApplicantDetail from "./pages/admin/AdmissionsApplicantDetail.jsx";
 import VerificationQueue from "./pages/admin/VerificationQueue.jsx";
+import UniversityRequests from "./pages/admin/UniversityRequests.jsx";
+import UniversityRequestDetail from "./pages/admin/UniversityRequestDetail.jsx";
 import VerificationReview from "./pages/admin/VerificationReview.jsx";
 import StudentAdmissionStatus from "./pages/student/AdmissionStatus.jsx";
 import ApplyRegister from "./pages/apply/Register.jsx";
@@ -92,6 +94,10 @@ export default function App() {
       <Route path="/admin/admissions/applicants/:applicantId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsApplicantDetail /></ProtectedRoute>} />
       <Route path="/admin/verification" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationQueue /></ProtectedRoute>} />
       <Route path="/admin/verification/:documentId" element={<ProtectedRoute roles={["tnteu_admin"]}><VerificationReview /></ProtectedRoute>} />
+
+      {/* University ↔ TNTEU governance requests */}
+      <Route path="/admin/university-requests" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><UniversityRequests /></ProtectedRoute>} />
+      <Route path="/admin/university-requests/:requestId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><UniversityRequestDetail /></ProtectedRoute>} />
 
       {/* Admin / SuperAdmin — full module suite */}
       <Route path="/admin/dashboard" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminDashboard /></ProtectedRoute>} />

@@ -122,6 +122,32 @@ export async function generateCertificatePdf(cert, { verifyBaseUrl }) {
   doc.fillColor(accent).fontSize(11).font("Helvetica-Bold").text("VALID", pageWidth - 160, pageHeight - 206, { align: "center", width: 40 });
   doc.fillColor(accent).fontSize(11).font("Helvetica-Bold").text("CERTIFIED", pageWidth - 160, pageHeight - 188, { align: "center", width: 40 });
 
+  // ── Counter-signature block ──
+  // Every institution that authorised this certificate, in the order they did,
+  // each with the fingerprint of the key it signed with. A reader can take any
+  // one of these to the public verify page and check it independently.
+  const chain = (cert.approvalChain || []).filter((link) => link.decision === "approved");
+  if (chain.length) {
+    const blockX = 70;
+    const blockY = pageHeight - 250;
+    doc.fillColor(muted).fontSize(8).font("Helvetica-Bold")
+      .text("COUNTER-SIGNED BY", blockX, blockY);
+
+    chain.slice(0, 3).forEach((link, index) => {
+      const y = blockY + 14 + index * 30;
+      const authority = link.keyId === "tnteu" ? "TNTEU" : link.keyId;
+      doc.fillColor(ink).fontSize(9).font("Helvetica-Bold")
+        .text(`${index + 1}. ${authority}`, blockX, y, { width: 340 });
+      doc.fillColor(muted).fontSize(7.5).font("Helvetica")
+        .text(
+          `${link.actorName || link.actorId} · ${new Date(link.decidedAt).toDateString()} · ${link.algorithm} · key ${String(link.keyFingerprint || "").slice(0, 16)}`,
+          blockX + 12,
+          y + 11,
+          { width: 330 }
+        );
+    });
+  }
+
   doc.moveTo(70, pageHeight - 140).lineTo(260, pageHeight - 140).stroke(ink);
   doc.fillColor(muted).fontSize(9).text("Authorized Signatory", 70, pageHeight - 122);
   doc.fillColor(ink).fontSize(11).font("Helvetica-Bold").text(institutionName, 70, pageHeight - 104);

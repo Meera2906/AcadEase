@@ -19,6 +19,58 @@ const TYPE_COLORS = {
   merit:      "bg-[#FFF3DC] text-warning",
 };
 
+// A certificate is authorised by two institutions in turn. Showing the student
+// exactly where their request is stops the "has anyone even looked at this?"
+// phone call to the college office.
+const STAGE_STEPS = [
+  { key: "requested", label: "Requested" },
+  { key: "college_review", label: "University approval" },
+  { key: "tnteu_review", label: "TNTEU counter-signature" },
+  { key: "issued", label: "Issued" },
+];
+
+function StageTrail({ request }) {
+  if (!request.stage) return null;
+
+  const order = ["college_review", "tnteu_review", "issued"];
+  const rejected = request.stage === "rejected";
+  const currentIndex = rejected ? -1 : order.indexOf(request.stage);
+  const approvedStages = new Set((request.approvals || []).filter((a) => a.decision === "approved").map((a) => a.stage));
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+      {STAGE_STEPS.map((step, index) => {
+        const done =
+          step.key === "requested" ||
+          approvedStages.has(step.key) ||
+          (step.key === "issued" && request.stage === "issued");
+        const active = !rejected && index - 1 === currentIndex;
+
+        return (
+          <span key={step.key} className="flex items-center gap-1.5">
+            {index > 0 && <span className="text-text-muted text-[10px]">›</span>}
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-pill font-medium ${
+                done ? "bg-[#E9FCE0] text-success"
+                : active ? "bg-[#FFF3DC] text-warning"
+                : rejected ? "bg-[#F1EFE6] text-text-muted"
+                : "bg-[#F1EFE6] text-text-muted"
+              }`}
+            >
+              {step.label}
+            </span>
+          </span>
+        );
+      })}
+      {rejected && (
+        <span className="text-[10px] px-2 py-0.5 rounded-pill bg-[#FFE7E9] text-danger font-medium">
+          Rejected
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function StudentCertificates() {
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
@@ -104,12 +156,15 @@ export default function StudentCertificates() {
                     <p className="font-medium text-text-primary text-sm">{r.purpose}</p>
                     <p className="text-xs text-text-muted mt-0.5">{new Date(r.createdAt).toDateString()}</p>
                     {r.rejectionReason && (
-                      <p className="text-xs text-danger mt-1">Rejected: {r.rejectionReason}</p>
+                      <p className="text-xs text-danger mt-1">
+                        Rejected by {r.rejectedStage === "tnteu_review" ? "TNTEU" : "your university"}: {r.rejectionReason}
+                      </p>
                     )}
+                    <StageTrail request={r} />
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge status={r.status} />
+                  <Badge status={r.stage === "issued" ? "approved" : r.status} />
                   {r.status === "approved" && r.pdfPath && (
                     <button
                       onClick={() => handleDownload(r.certId)}

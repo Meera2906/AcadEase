@@ -19,3 +19,4 @@ export { default as AuditLog } from "./AuditLog.js";
 export { default as Applicant } from "./Applicant.js";
 export { default as DocumentSubmission } from "./DocumentSubmission.js";
 export { default as AdmissionBatch } from "./AdmissionBatch.js";
+export { default as UniversityRequest, UNIVERSITY_REQUEST_TYPES } from "./UniversityRequest.js";

@@ -10,6 +10,7 @@ import {
   downloadCertificate,
   verifyCertificate,
   revokeCertificate,
+  getCertificateEligibility,
 } from "../controllers/certificateController.js";
 
 const router = Router();
@@ -18,11 +19,12 @@ const router = Router();
 router.get("/verify/:certId", asyncHandler(verifyCertificate));
 
 router.use(requireAuth);
+router.get("/eligibility", requireRole("student"), asyncHandler(getCertificateEligibility));
 router.post("/request", requireRole("student"), asyncHandler(requestCertificate));
 router.get("/requests", requireRole("college_admin", "tnteu_admin"), asyncHandler(listCertificateRequests));
 router.get("/requests/student/:studentId", asyncHandler(listStudentCertificateRequests));
-router.patch("/request/:id/approve", requireRole("college_admin", "tnteu_admin"), asyncHandler(approveCertificateRequest));
-router.patch("/request/:id/reject", requireRole("college_admin", "tnteu_admin"), asyncHandler(rejectCertificateRequest));
+router.patch("/request/:id/approve", requireRole("college_admin", "college_coordinator", "tnteu_admin"), asyncHandler(approveCertificateRequest));
+router.patch("/request/:id/reject", requireRole("college_admin", "college_coordinator", "tnteu_admin"), asyncHandler(rejectCertificateRequest));
 router.get("/download/:certId", asyncHandler(downloadCertificate));
 router.patch("/:certId/revoke", requireRole("college_admin", "tnteu_admin"), asyncHandler(revokeCertificate));
 

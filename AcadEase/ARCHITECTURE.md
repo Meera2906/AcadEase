@@ -32,6 +32,9 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 | Certificates (request → approve → PDF/QR → verify → revoke) | `routes/certificateRoutes.js` | ✅ |
 | Grievances | `routes/grievanceRoutes.js` | ✅ (basic MVP scope per PRD §5.5 — no SLA/escalation, that's Phase 2) |
 | Notifications, users, admin dashboard, gamification XP | `routes/miscRoutes.js` | ✅ core logic · ⬜ `bulk-import` is a documented 501 stub (needs multer + CSV parsing) |
+| **University → TNTEU governance requests** (typed requests, encrypted attachments, clarification thread, signed orders) | `routes/universityRequestRoutes.js`, `controllers/universityRequestController.js` | ✅ |
+| **Counter-signed approval chains** (RSA-PSS, chained, per-institution keys) | `utils/approvalChain.js`, `utils/keyring.js` | ✅ unit-tested in `test/approvalChain.test.js` |
+| Two-stage certificate issue (student → college → TNTEU → student) | `controllers/certificateController.js` | ✅ auto-generates the PDF on TNTEU's signature |
 | **Pre-admission applicant portal** (self-registration → instant checks → encrypt → eligibility → submit) | `routes/applicantRoutes.js`, `controllers/applicantController.js` | ✅ |
 | Envelope encryption for admission proofs (AES-256-GCM + RSA-OAEP key wrapping) | `utils/documentCrypto.js` | ✅ |
 | QR authenticity resolution | `utils/qrAuthenticity.js`, `utils/qrScan.js` | ✅ decodes QR from images *and* from image XObjects inside PDFs |
@@ -88,6 +91,26 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
   routinely under 50 KB and perfectly readable). PDFs are instead checked for
   actually carrying content — a text layer or an embedded image.
 
+### Counter-signature chains
+
+- **Asymmetric, not HMAC.** The original certificate HMAC is symmetric — anyone
+  who can verify can also forge. Approvals use RSA-PSS-SHA256 with one key pair
+  per institution, so only the key holder can sign while anyone can verify.
+  The HMAC is retained on the certificate for backwards compatibility.
+- **Each link signs the previous link's signature**, so removing, reordering or
+  editing a stage invalidates everything downstream.
+- **Links are self-describing.** Each carries its own `subjectType`/`subjectId`
+  (inside the signed payload), because the approval links bind to the *request*
+  while the final issuance link binds to the *certificate*. `verifyChain` takes
+  an allow-list of subjects so a valid signature cannot be lifted onto a
+  different record.
+- **A half-present key pair is a hard error.** Silently regenerating would
+  rotate the key out from under every signature already issued under it.
+- **`/api/certificates` is mounted ahead of the `/api` catch-all** for the same
+  reason as `/api/applicant`: the public `verify/:certId` endpoint was being
+  intercepted by `requireAuth` in `assessmentRoutes`, so QR verification only
+  worked for logged-in users — the opposite of the requirement.
+
 ### Encryption at rest
 
 Envelope encryption, in `utils/documentCrypto.js`:
@@ -135,6 +158,8 @@ whatever's in your MongoDB.
 | Applicant temporary login | `/apply/login` | ✅ |
 | **Applicant document upload** (instant per-file verdict, marks, live eligibility) | `/apply/documents` | ✅ |
 | Applicant status tracker | `/apply/status` | ✅ |
+| **University → TNTEU requests** (raise, attach, submit, clarify) | `/admin/university-requests` | ✅ |
+| Request detail + signed decision panel | `/admin/university-requests/:requestId` | ✅ TNTEU decides; both sides see the verified signature |
 | **University bulk submission** (CSV + documents, per-row report) | `/admin/admissions/upload` | ✅ |
 | **Applicant tracking** (paginated, checklist progress, enrol) | `/admin/admissions/applicants` | ✅ |
 | Applicant detail + required-document checklist | `/admin/admissions/applicants/:applicantId` | ✅ |

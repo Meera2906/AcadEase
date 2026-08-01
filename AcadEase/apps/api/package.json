@@ -12,7 +12,9 @@
     "seed:admissions": "node src/seed/seedAdmissions.js",
     "test": "node --test test/*.test.js",
     "e2e:admissions": "node e2e-admissions.mjs",
-    "e2e:preadmission": "node e2e-preadmission.mjs"
+    "e2e:preadmission": "node e2e-preadmission.mjs",
+    "e2e:signedflow": "node e2e-signedflow.mjs",
+    "e2e": "node e2e-admissions.mjs && node e2e-preadmission.mjs && node e2e-signedflow.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

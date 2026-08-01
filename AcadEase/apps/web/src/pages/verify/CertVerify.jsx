@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle, XCircle, AlertTriangle, GraduationCap } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, GraduationCap, ShieldCheck } from "lucide-react";
 import api from "../../api/client.js";
 
 export default function CertVerify() {
@@ -77,6 +77,51 @@ export default function CertVerify() {
             <Row label="Institution"       value={result.institutionId} />
             <Row label="Signature"         value={<span className={signatureValid ? "text-success font-semibold" : "text-danger font-semibold"}>{signatureValid ? "Valid ✓" : "Invalid ✕"}</span>} />
             <Row label="Status"            value={<span className="text-success font-semibold">Active ✓</span>} />
+          </div>
+        )}
+
+        {/* The authorisation chain. Each link was signed by a different
+            institution with its own key; all of them are re-checked here from
+            the public keys, so this page proves the chain rather than
+            asserting it. */}
+        {!loading && result?.approvals?.length > 0 && (
+          <div className="px-6 py-5 border-t border-border">
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck size={15} className={result.chainValid ? "text-success" : "text-danger"} />
+              <p className="text-sm font-display font-bold text-text-primary">
+                Chain of authorisation
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {result.approvals.map((approval, index) => (
+                <div key={index} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    {approval.signatureValid
+                      ? <CheckCircle size={15} className="text-success shrink-0" />
+                      : <XCircle size={15} className="text-danger shrink-0" />}
+                    {index < result.approvals.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+                  </div>
+                  <div className="pb-1 min-w-0">
+                    <p className="text-xs font-semibold text-text-primary">{approval.label}</p>
+                    <p className="text-[11px] text-text-muted">
+                      {approval.authority} · {approval.decidedBy} · {new Date(approval.decidedAt).toLocaleDateString()}
+                    </p>
+                    <p className="text-[10px] text-text-muted font-mono break-all">
+                      {approval.algorithm} · key {String(approval.keyFingerprint || "").slice(0, 16)}
+                    </p>
+                    {!approval.signatureValid && (
+                      <p className="text-[11px] text-danger font-semibold mt-0.5">{approval.problem}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-text-muted mt-3 pt-3 border-t border-border leading-relaxed">
+              Each signature is checked against the issuing institution's public key. Anyone can verify these —
+              only the key holder could have created them.
+            </p>
           </div>
         )}
 

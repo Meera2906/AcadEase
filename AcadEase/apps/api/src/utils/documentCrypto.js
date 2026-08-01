@@ -1,7 +1,5 @@
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
-import { fileURLToPath } from "url";
+import { ensureKeyPair, loadPublicKey, loadPrivateKey, TNTEU_KEY_ID } from "./keyring.js";
 
 // ---------------------------------------------------------------------------
 // Envelope encryption for admission proofs.
@@ -21,71 +19,6 @@ import { fileURLToPath } from "url";
 //
 // Private keys are PKCS#8, encrypted at rest with DOC_KEY_PASSPHRASE.
 // ---------------------------------------------------------------------------
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Overridable so tests can use a throwaway keyring instead of the real one.
-const KEY_DIR = process.env.DOC_KEY_DIR
-  ? path.resolve(process.env.DOC_KEY_DIR)
-  : path.resolve(__dirname, "../../secure-storage/keys");
-
-export const TNTEU_KEY_ID = "tnteu";
-
-function passphrase() {
-  const secret = process.env.DOC_KEY_PASSPHRASE;
-  if (!secret) {
-    throw new Error(
-      "DOC_KEY_PASSPHRASE is not set — admission documents cannot be encrypted or read without it"
-    );
-  }
-  return secret;
-}
-
-function keyPaths(keyId) {
-  const safe = String(keyId).replace(/[^A-Za-z0-9_-]/g, "_");
-  return {
-    publicPath: path.join(KEY_DIR, `${safe}.pub.pem`),
-    privatePath: path.join(KEY_DIR, `${safe}.key.pem`),
-  };
-}
-
-// Key pairs are created on first use, so adding a university needs no
-// out-of-band ceremony.
-export function ensureKeyPair(keyId) {
-  if (!fs.existsSync(KEY_DIR)) fs.mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
-  const { publicPath, privatePath } = keyPaths(keyId);
-
-  if (fs.existsSync(publicPath) && fs.existsSync(privatePath)) {
-    return { publicPath, privatePath };
-  }
-
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-    modulusLength: 3072,
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: {
-      type: "pkcs8",
-      format: "pem",
-      cipher: "aes-256-cbc",
-      passphrase: passphrase(),
-    },
-  });
-
-  fs.writeFileSync(publicPath, publicKey, { mode: 0o600 });
-  fs.writeFileSync(privatePath, privateKey, { mode: 0o600 });
-  return { publicPath, privatePath };
-}
-
-function loadPublicKey(keyId) {
-  const { publicPath } = ensureKeyPair(keyId);
-  return crypto.createPublicKey(fs.readFileSync(publicPath, "utf8"));
-}
-
-function loadPrivateKey(keyId) {
-  const { privatePath } = ensureKeyPair(keyId);
-  return crypto.createPrivateKey({
-    key: fs.readFileSync(privatePath, "utf8"),
-    passphrase: passphrase(),
-  });
-}
 
 function wrap(keyId, dek) {
   return crypto
@@ -136,6 +69,8 @@ export function encryptDocument(plaintext, { collegeId }) {
     },
   };
 }
+
+export { TNTEU_KEY_ID, ensureKeyPair };
 
 export class DecryptionDeniedError extends Error {
   constructor(message) {

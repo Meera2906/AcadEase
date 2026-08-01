@@ -5,7 +5,7 @@ import {
   FileBadge, MessageSquareWarning, Bell, LogOut,
   GraduationCap, Menu, X, User, Users, Building2,
   BookOpen, Megaphone, BarChart2, ChevronDown,
-  ShieldCheck, UploadCloud, UserCheck,
+  ShieldCheck, UploadCloud, UserCheck, Landmark,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api, { getAccessToken } from "../../api/client.js";
@@ -37,6 +37,8 @@ const NAV_BY_ROLE = {
     { to: "/admin/dashboard",              label: "Dashboard",       icon: LayoutDashboard },
     { to: "/admin/admissions/upload",      label: "Bulk Submission", icon: UploadCloud },
     { to: "/admin/admissions/applicants",  label: "Applicants",      icon: UserCheck },
+    { to: "/admin/university-requests",    label: "TNTEU Requests",  icon: Landmark },
+    { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/users",        label: "Users",        icon: Users },
     { to: "/admin/results",      label: "Results",      icon: ClipboardList },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
@@ -44,7 +46,6 @@ const NAV_BY_ROLE = {
     { to: "/admin/departments",  label: "Departments",  icon: Building2 },
     { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
-    { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },
   ],
@@ -52,13 +53,14 @@ const NAV_BY_ROLE = {
   tnteu_admin: [
     { to: "/admin/verification",           label: "Verification",  icon: ShieldCheck },
     { to: "/admin/admissions/applicants",  label: "Applicants",    icon: UserCheck },
+    { to: "/admin/university-requests",    label: "College Requests", icon: Landmark },
+    { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
     { to: "/admin/users",        label: "Users",        icon: Users },
     { to: "/admin/departments",  label: "Universities", icon: Building2 },
     { to: "/admin/courses",      label: "Courses",      icon: BookOpen },
     { to: "/admin/attendance",   label: "Attendance",   icon: CalendarCheck },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
-    { to: "/admin/certificates", label: "Certificates", icon: FileBadge },
     { to: "/admin/grievances",   label: "Grievances",   icon: MessageSquareWarning },
     { to: "/admin/announcements",label: "Announcements",icon: Megaphone },
     { to: "/admin/reports",      label: "Reports",      icon: BarChart2 },

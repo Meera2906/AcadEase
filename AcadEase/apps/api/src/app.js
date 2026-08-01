@@ -17,6 +17,7 @@ import certificateRoutes from "./routes/certificateRoutes.js";
 import grievanceRoutes from "./routes/grievanceRoutes.js";
 import admissionRoutes from "./routes/admissionRoutes.js";
 import applicantRoutes from "./routes/applicantRoutes.js";
+import universityRequestRoutes from "./routes/universityRequestRoutes.js";
 import miscRoutes from "./routes/miscRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
@@ -86,11 +87,16 @@ app.use("/api/auth", authRoutes);
 // at the top of the router, which would 401 the applicant portal's public
 // register/login endpoints before they were ever reached.
 app.use("/api/applicant", applicantRoutes);
+// Also ahead of the catch-all: /api/certificates/verify/:certId is the public
+// QR-scan endpoint. Mounted after assessmentRoutes it was being intercepted by
+// that router's requireAuth, so anyone without a login got "Missing access
+// token" — which defeats the entire point of a publicly verifiable certificate.
+app.use("/api/certificates", certificateRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api", assessmentRoutes); // exposes /api/assessments/*, /api/marks/*, /api/results/*
-app.use("/api/certificates", certificateRoutes);
 app.use("/api/grievances", grievanceRoutes);
 app.use("/api/admissions", admissionRoutes);
+app.use("/api/university-requests", universityRequestRoutes);
 app.use("/api", miscRoutes); // exposes /api/notifications/*, /api/users/*, /api/admin/*, /api/gamification/*
 
 app.use(notFound);
