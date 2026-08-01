@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Certificate</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
+    .container { width: 900px; margin: 0 auto; padding: 40px; border: 10px solid #e2e8f0; }
+    .header { text-align:center; }
+    .institution { font-size: 28px; font-weight: 700; color:#1d4ed8 }
+    .title { font-size: 18px; margin-top:8px }
+    .recipient { margin-top:30px; text-align:center }
+    .student-name { font-size: 24px; font-weight:700 }
+    .meta { margin-top:20px; text-align:center; color:#475569 }
+    .footer { margin-top:60px; display:flex; justify-content:space-between }
+    .sig { text-align:center }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="institution">{{institution}}</div>
+      <div class="title">Certificate of Achievement</div>
+    </div>
+
+    <div class="recipient">
+      <p>This is to certify that</p>
+      <div class="student-name">{{studentName}}</div>
+      <div class="meta">Student ID: {{studentId}} &nbsp; | &nbsp; Department: {{department}} &nbsp; | &nbsp; CGPA: {{cgpa}}</div>
+      <p style="margin-top:20px">Has been awarded this certificate (Certificate ID: {{certificateId}}) on {{issueDate}}.</p>
+    </div>
+
+    <div class="footer">
+      <div class="sig">
+        <div>______________________</div>
+        <div>Registrar</div>
+      </div>
+      <div class="sig">
+        <div>______________________</div>
+        <div>Controller of Examinations</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
