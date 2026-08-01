@@ -32,6 +32,11 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 | Certificates (request → approve → PDF/QR → verify → revoke) | `routes/certificateRoutes.js` | ✅ |
 | Grievances | `routes/grievanceRoutes.js` | ✅ (basic MVP scope per PRD §5.5 — no SLA/escalation, that's Phase 2) |
 | Notifications, users, admin dashboard, gamification XP | `routes/miscRoutes.js` | ✅ core logic · ⬜ `bulk-import` is a documented 501 stub (needs multer + CSV parsing) |
+| **Pre-admission applicant portal** (self-registration → instant checks → encrypt → eligibility → submit) | `routes/applicantRoutes.js`, `controllers/applicantController.js` | ✅ |
+| Envelope encryption for admission proofs (AES-256-GCM + RSA-OAEP key wrapping) | `utils/documentCrypto.js` | ✅ |
+| QR authenticity resolution | `utils/qrAuthenticity.js`, `utils/qrScan.js` | ✅ decodes QR from images *and* from image XObjects inside PDFs |
+| Legibility / clarity gate (dimensions, DPI, JPEG quantisation, blank pages) | `utils/imageInspect.js` | ✅ |
+| Course eligibility rules (B.Ed / M.Ed, reserved-category rates) | `utils/eligibility.js` | ✅ |
 | **Admission verification** (bulk import → hash + rule flags → TNTEU queue → verify/reject → enrol) | `routes/admissionRoutes.js`, `controllers/admissionController.js` | ✅ — **this is now the demo centrepiece** |
 | Admission rules (required-document checklist, deterministic flags, derived applicant status) | `utils/admissionRules.js` | ✅ unit-tested in `test/admissionRules.test.js` |
 | Assistive field pre-fill from document text | `utils/documentExtract.js`, `utils/pdfText.js` | ✅ — pattern-matching only, never a decision |
@@ -60,7 +65,45 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 - **Re-uploading a document type replaces the file and resets it to `pending`.**
   A resubmission has to be looked at again.
 - Files live in `apps/api/secure-storage/admission-docs/<collegeId>/` under
-  generated UUID names, outside the `/storage` static mount.
+  generated UUID names, outside the `/storage` static mount, and are
+  **ciphertext** — see the encryption note below.
+- **Applicant tokens are separated in the token, not by convention.** A
+  pre-admission token carries `typ: "applicant"`, and `requireAuth` rejects it
+  outright. A future staff route cannot accidentally accept one by forgetting a
+  role check. The mirror guard `requireApplicantAuth` loads the applicant record
+  itself, so no applicant handler ever takes an id from the request.
+- **`/api/applicant` is mounted ahead of the `/api` catch-all routers** in
+  `app.js`. Those routers call `requireAuth` at the router level, which would
+  401 the portal's public register/login endpoints before they were reached.
+- **`qr_absent` and issuer-QR presence are deliberately *not* flags.** Flags are
+  what push a document up the queue, so they have to mean "something looks
+  wrong". Most Indian certificates have no QR, and most new ones have an issuer
+  QR — flagging either would flag the entire queue and destroy the ordering.
+  Both are recorded on `qrCheck` and rendered on the review screen instead.
+- **`queued: false` keeps drafts out of the reviewer's queue.** An applicant
+  still assembling their application is not review work; submitting flips the
+  flag on all their documents in one update.
+- **Legibility is judged on pixels, not bytes.** An early version had a byte
+  floor, which wrongly refused born-digital PDFs (DigiLocker downloads are
+  routinely under 50 KB and perfectly readable). PDFs are instead checked for
+  actually carrying content — a text layer or an embedded image.
+
+### Encryption at rest
+
+Envelope encryption, in `utils/documentCrypto.js`:
+
+- Per-file random AES-256-GCM data key; only ciphertext is written to disk.
+- The data key is RSA-3072 OAEP-wrapped once for `tnteu` and once for the
+  owning `collegeId`. `decryptDocument` picks the key by the caller's role, so
+  university staff can only ever open their own applicants' documents.
+- Every other principal — student, faculty, applicant, another university — has
+  no wrapped copy, so there is no key path at all rather than a permission check
+  that could be bypassed.
+- GCM's auth tag makes on-disk tampering a hard failure (422), not a silent
+  corrupt render.
+- Key pairs are generated on first use into `secure-storage/keys/` (override
+  with `DOC_KEY_DIR`; tests use a temp dir), PKCS#8-encrypted under
+  `DOC_KEY_PASSPHRASE`.
 
 **Every route in PRD §7 (the full API catalogue) exists and is mounted.**
 Nothing returns fake/mock data — it's all real Mongoose queries against
@@ -88,6 +131,10 @@ whatever's in your MongoDB.
 | Screen | Route | Status |
 |---|---|---|
 | Login (password + TOTP step) | `/login` | ✅ |
+| **Applicant registration** (public) | `/apply` | ✅ own session, own axios client |
+| Applicant temporary login | `/apply/login` | ✅ |
+| **Applicant document upload** (instant per-file verdict, marks, live eligibility) | `/apply/documents` | ✅ |
+| Applicant status tracker | `/apply/status` | ✅ |
 | **University bulk submission** (CSV + documents, per-row report) | `/admin/admissions/upload` | ✅ |
 | **Applicant tracking** (paginated, checklist progress, enrol) | `/admin/admissions/applicants` | ✅ |
 | Applicant detail + required-document checklist | `/admin/admissions/applicants/:applicantId` | ✅ |

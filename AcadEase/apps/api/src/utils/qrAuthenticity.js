@@ -142,7 +142,7 @@ async function resolveInternal(certId, applicant) {
  * }>}
  */
 export async function checkDocumentAuthenticity({ buffer, mimeType, applicant }) {
-  const { payloads } = await scanForQrCodes(buffer, mimeType);
+  const { payloads, imagesScanned } = await scanForQrCodes(buffer, mimeType);
 
   // Printed/linked verification URLs are a fallback channel when a QR bitmap
   // is too degraded to decode.
@@ -158,6 +158,7 @@ export async function checkDocumentAuthenticity({ buffer, mimeType, applicant })
     return {
       ...resolved,
       payloads,
+      imagesScanned,
       link: payload,
       flags: resolved.status === QR_STATUS.VERIFIED_SOURCE ? [] : ["qr_check_failed"],
     };
@@ -174,9 +175,15 @@ export async function checkDocumentAuthenticity({ buffer, mimeType, applicant })
       detail:
         "This is a recognised issuer's verification portal, but we cannot query it automatically — a TNTEU reviewer opens the link and confirms the record against the document. Presence of this link is not by itself proof of authenticity.",
       payloads,
+      imagesScanned,
       issuerHost: issuer,
       link: payload,
-      flags: ["qr_needs_manual_check"],
+      // Not a flag. A flag means "something looks wrong", and it is what
+      // pushes a document up the queue. Nearly every modern certificate
+      // carries an issuer QR, so flagging them all would flag everything and
+      // the ordering would stop meaning anything. The link is surfaced to the
+      // reviewer on the review screen instead.
+      flags: [],
     };
   }
 
@@ -188,6 +195,7 @@ export async function checkDocumentAuthenticity({ buffer, mimeType, applicant })
       detail:
         "A QR code was found and decoded, but it does not point at any verification service we know. The reviewer should check what it encodes.",
       payloads,
+      imagesScanned,
       flags: ["qr_unrecognised"],
     };
   }
@@ -199,13 +207,27 @@ export async function checkDocumentAuthenticity({ buffer, mimeType, applicant })
     detail:
       "This document carries no scannable verification QR. That is normal for older certificates — it just means the reviewer verifies it the traditional way, against the printed register number and seal.",
     payloads: [],
-    flags: ["qr_absent"],
+    imagesScanned,
+    // Also not a flag: most Indian certificates in circulation predate QR
+    // codes entirely. Their absence is the norm, not a warning sign.
+    flags: [],
   };
 }
 
 export const QR_FLAG_LABELS = {
   qr_check_failed: "QR verification failed",
-  qr_needs_manual_check: "Issuer QR present — open the link and confirm manually",
   qr_unrecognised: "QR code present but not a recognised verification link",
-  qr_absent: "No verification QR on this document",
+};
+
+// How each outcome should read on the review screen. Only VERIFIED_SOURCE is
+// ever presented as a confirmation.
+export const QR_STATUS_LABELS = {
+  [QR_STATUS.VERIFIED_SOURCE]: "Verified against the issuing record",
+  [QR_STATUS.ISSUER_REFERENCE]: "Issuer verification link — confirm manually",
+  [QR_STATUS.UNRECOGNISED_QR]: "Unrecognised QR code",
+  [QR_STATUS.ABSENT]: "No QR code (normal for older certificates)",
+  [QR_STATUS.REVOKED_SOURCE]: "Revoked certificate",
+  [QR_STATUS.TAMPERED_SOURCE]: "Signature mismatch",
+  [QR_STATUS.UNKNOWN_SOURCE_REFERENCE]: "QR references a record that does not exist",
+  [QR_STATUS.HOLDER_MISMATCH]: "Issued to a different person",
 };

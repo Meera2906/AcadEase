@@ -35,9 +35,36 @@ against the preview, click Verify" — seconds instead of minutes, per document.
 
 ### The verification workflow
 
+There are two ways an application reaches TNTEU. Both land in the same queue.
+
+**Route A — the applicant applies for themselves** (`/apply`)
+
+0. A prospective student registers for a **temporary applicant account**. They
+   are not a `User` and hold no student record — their token carries
+   `typ: "applicant"`, which the staff/student auth guard rejects outright.
+   They upload their own certificates and get an answer on each one within
+   seconds:
+
+   | Check | Refused outright | Flagged for the reviewer |
+   | --- | --- | --- |
+   | Legibility — pixel dimensions, effective DPI against A4, JPEG quantisation, blank pages, wrong file type | ✅ | low-DPI warnings |
+   | QR resolves to one of our own certificates: missing record, broken signature, revoked, or issued to someone else | ✅ | — |
+   | QR points at a recognised issuer portal | — | shown as a link the reviewer opens; **never** reported as verified |
+   | The identical file already submitted by another applicant | ✅ | — |
+   | Name mismatch, missing fields, lapsed dates | — | ✅ |
+
+   A refusal explains exactly what to fix, so the applicant rescans while they
+   are still at their desk instead of finding out weeks later.
+
+1. When every required document is uploaded **and** the declared marks clear the
+   programme's published minimum, they submit. Drafts never enter TNTEU's queue.
+
+**Route B — the university submits on their behalf**
+
 1. **University admin** bulk-submits a CSV of applicants plus a folder of
-   document files. Every file is hashed and rule-checked on arrival, and the
-   admin gets a per-row report — succeeded / flagged / rejected, with reasons.
+   document files. Every file goes through the same checks as Route A — a batch
+   cannot be used to bypass them — and the admin gets a per-row report:
+   succeeded / flagged / rejected, with reasons.
 2. **TNTEU super admin** works a paginated queue sorted flagged-first. Opening a
    row gives a side-by-side view: the document on the left, its extracted and
    editable fields on the right, and any flags spelled out (e.g. *"this exact
@@ -47,9 +74,56 @@ against the preview, click Verify" — seconds instead of minutes, per document.
    to `verified` only when every required document for their programme is
    individually verified. The checklist state ("3 of 5 required documents
    verified") is visible everywhere the applicant appears.
-4. Once verified, the university **enrols** the applicant, which creates their
-   student account. From there they log in from their own device and download
-   their digitally signed certificate whenever they need it.
+4. Once verified **and** eligible, the university **enrols** the applicant. Only
+   then does a student account exist. The temporary applicant password is
+   destroyed at that moment and its token stops working — from then on they sign
+   in on the main login page and download their digitally signed certificates
+   from their own device whenever they need them.
+
+### What a QR code can and cannot prove
+
+This is the part most easily overclaimed, so it is worth being precise.
+
+- If the QR resolves to a certificate **AcadEase itself issued**, we can settle
+  the question completely: the record must exist, its HMAC signature must match,
+  it must not be revoked, and it must be in the applicant's name. Failing any of
+  those is proof the document is bad, and the upload is refused on the spot.
+- If the QR points at a **third-party issuer** (a state board, a university), we
+  can confirm the QR is well-formed and where it leads — nothing more. It is
+  shown to the reviewer as a one-click link, and is *never* rendered as
+  "verified", because we did not verify it. Silently upgrading a link into a
+  green tick would be exactly the hallucination risk this design avoids, just
+  wearing a security badge.
+- **No QR is not a red flag.** Most Indian certificates in circulation predate
+  QR codes. Flagging their absence would flag nearly every document and make the
+  flagged-first queue ordering meaningless.
+
+### Encryption at rest
+
+Admission proofs are identity documents — they carry names, dates of birth,
+register numbers and Aadhaar numbers, sitting on a server that faculty and
+students also log in to. So the plaintext never touches the disk:
+
+1. Each file gets its own random AES-256-GCM data key.
+2. Only the ciphertext is written.
+3. That data key is wrapped (RSA-3072, OAEP-SHA256) **twice**: once for TNTEU
+   and once for the university that owns the applicant.
+4. Reading a document requires unwrapping one of those two keys. A student, a
+   faculty account, an applicant, or a different university has no wrapped copy
+   at all — there is no key path for them, not merely a missing permission
+   check. GCM's auth tag means a file tampered with on disk throws instead of
+   rendering.
+
+Private keys are PKCS#8, encrypted at rest with `DOC_KEY_PASSPHRASE`. Losing
+that passphrase makes every stored admission proof permanently unreadable.
+
+### Eligibility
+
+`utils/eligibility.js` expresses TNTEU's published admission norms as
+arithmetic — B.Ed needs 50% in the UG degree (45% for SC/ST/BC/MBC), M.Ed needs
+50% in the B.Ed. Given the same marks and category it always returns the same
+answer and names the rule that failed. It gates submission *and* enrolment, and
+is re-evaluated at enrolment rather than trusted from storage.
 
 ### Bulk-data and security guarantees
 
@@ -231,7 +305,22 @@ list is empty.
 
 ---
 
-## The five-minute demo path
+## Demo path A — a student applies for themselves (2 minutes)
+
+1. Open **`/apply`** (linked from the bottom of the login page). Register with
+   any email, pick B.Ed and a university, category **BC**.
+2. On the documents page, try uploading a phone screenshot or a small cropped
+   image first — it is **refused instantly** with the pixel dimensions and the
+   DPI it needs instead.
+3. Upload the five required certificates. Any file already used by another
+   applicant is refused as a duplicate.
+4. Enter marks with a UG percentage of **43** — the eligibility panel shows the
+   45% reserved-category shortfall and the Submit button stays disabled. Raise
+   it to 47 and it unlocks.
+5. Submit → the documents enter TNTEU's queue. Nothing was in the queue while
+   the application was still a draft.
+
+## Demo path B — the university bulk-submits (5 minutes)
 
 1. **ADM_CSE_001** → *Bulk Submission* → upload `demo-data/applicants.csv`
    (7 imported, 2 rows rejected with reasons), then all 35 files from
@@ -249,10 +338,21 @@ list is empty.
 6. Log in as that student → *Admission* shows 5/5 verified → *Certificates* →
    download the signed PDF and scan its QR against the public verify page.
 
-An automated run of this same flow — 49 assertions covering the import report,
-flag detection, tenant isolation, queue ordering, the checklist gate, the
-rejection-reason requirement, the enrolment gate, aggregation and the audit
-trail — lives in `apps/api/e2e-admissions.mjs`.
+Both flows have automated end-to-end runs against a real database and a real
+HTTP server:
+
+| Script | Covers | Assertions |
+| --- | --- | --- |
+| `apps/api/e2e-admissions.mjs` | Bulk import report, flag detection, tenant isolation, queue ordering, the checklist gate, rejection reasons, the enrolment gate, DB-layer aggregation, audit trail | 49 |
+| `apps/api/e2e-preadmission.mjs` | Applicant registration and token isolation, every instant check, QR authenticity across 8 cases, encryption at rest and who can decrypt, tamper detection, the eligibility gate, drafts staying out of the queue, handover to a student account | 59 |
+
+Both are **destructive** — they reset the demo applicants and their documents,
+so point them at a dev database only. `npm test` runs the 34 unit tests, which
+are non-destructive and need no database.
+
+Deliberate demo detail: **APP_2025_005** in the bulk package has a UG
+percentage of 43.5% at the BC rate, so even after documents are verified they
+are blocked at enrolment by the eligibility gate.
 
 ---
 

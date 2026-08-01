@@ -13,6 +13,7 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
+import { PNG } from "pngjs";
 import { fileURLToPath } from "url";
 import connectDB from "../config/db.js";
 import { College, User } from "../models/index.js";
@@ -49,21 +50,33 @@ function renderPdf(title, fields) {
   });
 }
 
-// A 1x1 PNG — stands in for a phone-camera scan with no text layer, which is
-// what the `unreadable` flag exists to catch.
-const SCAN_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64"
-);
+// A correctly sized A4 scan at ~200 DPI that carries no text layer — a photo
+// of a certificate. It passes the legibility gate (it is a real, full-size
+// scan) but nothing can be pre-filled from it, which is exactly what the
+// `unreadable` flag is for. Some faint marks are drawn so it is not a blank
+// page either.
+function scanWithoutTextLayer() {
+  const width = 1654;
+  const height = 2339;
+  const png = new PNG({ width, height });
+  png.data.fill(255);
+  for (let y = 200; y < height - 200; y += 64) {
+    for (let x = 180; x < width - 400; x += 1) {
+      const idx = (y * width + x) << 2;
+      png.data[idx] = png.data[idx + 1] = png.data[idx + 2] = 90;
+    }
+  }
+  return PNG.sync.write(png);
+}
 
 const APPLICANTS = [
-  { applicantId: "APP_2025_001", name: "Anjali Murugan",   program: "BEd", dob: "14-03-2002", gender: "F", email: "anjali.murugan@example.com", phone: "9840012001", rollNumber: "KCE2025001", category: "BC" },
-  { applicantId: "APP_2025_002", name: "Bharath Selvan",   program: "BEd", dob: "02-07-2001", gender: "M", email: "bharath.selvan@example.com", phone: "9840012002", rollNumber: "KCE2025002", category: "MBC" },
-  { applicantId: "APP_2025_003", name: "Chithra Devi",     program: "BEd", dob: "29-11-2002", gender: "F", email: "chithra.devi@example.com",   phone: "9840012003", rollNumber: "KCE2025003", category: "SC" },
-  { applicantId: "APP_2025_004", name: "Dinesh Kumar",     program: "BEd", dob: "18-01-2000", gender: "M", email: "dinesh.kumar@example.com",   phone: "9840012004", rollNumber: "KCE2025004", category: "OC" },
-  { applicantId: "APP_2025_005", name: "Elakkiya Ravi",    program: "BEd", dob: "06-09-2003", gender: "F", email: "elakkiya.ravi@example.com",  phone: "9840012005", rollNumber: "KCE2025005", category: "BC" },
-  { applicantId: "APP_2025_006", name: "Farhan Abbas",     program: "BEd", dob: "23-05-2001", gender: "M", email: "farhan.abbas@example.com",   phone: "9840012006", rollNumber: "KCE2025006", category: "BCM" },
-  { applicantId: "APP_2025_007", name: "Gayathri Nathan",  program: "MEd", dob: "11-12-1999", gender: "F", email: "gayathri.nathan@example.com", phone: "9840012007", rollNumber: "KCE2025007", category: "BC" },
+  { applicantId: "APP_2025_001", name: "Anjali Murugan",   program: "BEd", dob: "14-03-2002", gender: "F", email: "anjali.murugan@example.com", phone: "9840012001", rollNumber: "KCE2025001", category: "BC",  tenthPercentage: 88.2, twelfthPercentage: 84.5, ugPercentage: 76.3 },
+  { applicantId: "APP_2025_002", name: "Bharath Selvan",   program: "BEd", dob: "02-07-2001", gender: "M", email: "bharath.selvan@example.com", phone: "9840012002", rollNumber: "KCE2025002", category: "MBC", tenthPercentage: 79.0, twelfthPercentage: 72.4, ugPercentage: 68.1 },
+  { applicantId: "APP_2025_003", name: "Chithra Devi",     program: "BEd", dob: "29-11-2002", gender: "F", email: "chithra.devi@example.com",   phone: "9840012003", rollNumber: "KCE2025003", category: "SC",  tenthPercentage: 74.6, twelfthPercentage: 69.8, ugPercentage: 61.2 },
+  { applicantId: "APP_2025_004", name: "Dinesh Kumar",     program: "BEd", dob: "18-01-2000", gender: "M", email: "dinesh.kumar@example.com",   phone: "9840012004", rollNumber: "KCE2025004", category: "OC",  tenthPercentage: 81.4, twelfthPercentage: 77.0, ugPercentage: 58.9 },
+  { applicantId: "APP_2025_005", name: "Elakkiya Ravi",    program: "BEd", dob: "06-09-2003", gender: "F", email: "elakkiya.ravi@example.com",  phone: "9840012005", rollNumber: "KCE2025005", category: "BC",  tenthPercentage: 70.2, twelfthPercentage: 76.1, ugPercentage: 43.5 },
+  { applicantId: "APP_2025_006", name: "Farhan Abbas",     program: "BEd", dob: "23-05-2001", gender: "M", email: "farhan.abbas@example.com",   phone: "9840012006", rollNumber: "KCE2025006", category: "BCM", tenthPercentage: 85.9, twelfthPercentage: 80.3, ugPercentage: 71.7 },
+  { applicantId: "APP_2025_007", name: "Gayathri Nathan",  program: "MEd", dob: "11-12-1999", gender: "F", email: "gayathri.nathan@example.com", phone: "9840012007", rollNumber: "KCE2025007", category: "BC",  tenthPercentage: 90.1, twelfthPercentage: 87.6, ugPercentage: 79.4, bedPercentage: 74.8 },
 ];
 
 function csvCell(value) {
@@ -72,7 +85,8 @@ function csvCell(value) {
 }
 
 function buildCsv() {
-  const headers = ["applicantId", "name", "program", "dob", "gender", "email", "phone", "rollNumber", "category"];
+  const headers = ["applicantId", "name", "program", "dob", "gender", "email", "phone", "rollNumber", "category",
+    "tenthPercentage", "twelfthPercentage", "ugPercentage", "bedPercentage"];
   const lines = [headers.join(",")];
 
   APPLICANTS.forEach((applicant) => {
@@ -80,8 +94,8 @@ function buildCsv() {
   });
 
   // Two deliberately bad rows so the import report has something to report.
-  lines.push('APP_2025_008,"Harini, Balan",BSc,05-05-2002,F,harini.balan@example.com,9840012008,KCE2025008,BC');
-  lines.push(",Missing Id Row,BEd,01-01-2002,M,noid@example.com,9840012009,KCE2025009,OC");
+  lines.push('APP_2025_008,"Harini, Balan",BSc,05-05-2002,F,harini.balan@example.com,9840012008,KCE2025008,BC,80,75,70,');
+  lines.push(",Missing Id Row,BEd,01-01-2002,M,noid@example.com,9840012009,KCE2025009,OC,80,75,70,");
 
   return `${lines.join("\n")}\n`;
 }
@@ -181,7 +195,7 @@ async function writeDocuments() {
     })
   );
   await write("APP_2025_005", "ug_degree", await ugDegree("Elakkiya Ravi", "2024"));
-  await write("APP_2025_005", "id_proof", SCAN_PNG, "png");
+  await write("APP_2025_005", "id_proof", scanWithoutTextLayer(), "png");
 
   // ── APP_2025_006 — community certificate whose validity has lapsed ──
   await write("APP_2025_006", "10th_marksheet", await marksheet("Farhan Abbas", "Tenth", "1024578906", "2017"));

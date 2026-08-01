@@ -82,12 +82,15 @@ app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().
 app.use("/storage", requireAuth, express.static(path.join(__dirname, "../storage")));
 
 app.use("/api/auth", authRoutes);
+// Mounted ahead of the "/api" catch-all routers below: those call requireAuth
+// at the top of the router, which would 401 the applicant portal's public
+// register/login endpoints before they were ever reached.
+app.use("/api/applicant", applicantRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api", assessmentRoutes); // exposes /api/assessments/*, /api/marks/*, /api/results/*
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/grievances", grievanceRoutes);
 app.use("/api/admissions", admissionRoutes);
-app.use("/api/applicant", applicantRoutes);
 app.use("/api", miscRoutes); // exposes /api/notifications/*, /api/users/*, /api/admin/*, /api/gamification/*
 
 app.use(notFound);

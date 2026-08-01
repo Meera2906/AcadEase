@@ -30,6 +30,11 @@ import AdmissionsApplicantDetail from "./pages/admin/AdmissionsApplicantDetail.j
 import VerificationQueue from "./pages/admin/VerificationQueue.jsx";
 import VerificationReview from "./pages/admin/VerificationReview.jsx";
 import StudentAdmissionStatus from "./pages/student/AdmissionStatus.jsx";
+import ApplyRegister from "./pages/apply/Register.jsx";
+import ApplyLogin from "./pages/apply/Login.jsx";
+import ApplyDocuments from "./pages/apply/Documents.jsx";
+import ApplyStatus from "./pages/apply/Status.jsx";
+import { ApplicantProvider } from "./context/ApplicantContext.jsx";
 import CertVerify from "./pages/verify/CertVerify.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 
@@ -41,6 +46,13 @@ export default function App() {
 
       {/* Public — no auth required */}
       <Route path="/verify/:certId" element={<CertVerify />} />
+
+      {/* Pre-admission applicant portal — its own session, separate from the
+          staff/student one, and retired the moment the applicant is enrolled. */}
+      <Route path="/apply" element={<ApplicantProvider><ApplyRegister /></ApplicantProvider>} />
+      <Route path="/apply/login" element={<ApplicantProvider><ApplyLogin /></ApplicantProvider>} />
+      <Route path="/apply/documents" element={<ApplicantProvider><ApplyDocuments /></ApplicantProvider>} />
+      <Route path="/apply/status" element={<ApplicantProvider><ApplyStatus /></ApplicantProvider>} />
 
       {/* Student */}
       <Route path="/student/dashboard" element={<ProtectedRoute roles={["student"]}><StudentDashboard /></ProtectedRoute>} />

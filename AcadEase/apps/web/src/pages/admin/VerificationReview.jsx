@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, XCircle, Clock, CircleDashed,
-  FileWarning, Download, Info,
+  FileWarning, Download, Info, ShieldCheck, ScanLine, ExternalLink, Lock,
 } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
@@ -174,8 +174,18 @@ export default function VerificationReview() {
     );
   }
 
-  const { document: doc, applicant, collegeName, checklist, verifiedCount, requiredCount, duplicateOf, flagLabels } = data;
+  const { document: doc, applicant, collegeName, checklist, verifiedCount, requiredCount, duplicateOf, flagLabels, eligibility } = data;
   const decided = doc.status !== "pending";
+
+  const qr = doc.qrCheck || {};
+  const QR_VIEW = {
+    verified_source: { tone: "bg-[#E9FCE0] border-[#b6f0cc] text-success", icon: ShieldCheck, title: "Authenticity confirmed" },
+    issuer_reference: { tone: "bg-[#E8ECFF] border-[#c3ccff] text-signal", icon: ScanLine, title: "Issuer verification link" },
+    unrecognised_qr: { tone: "bg-[#FFF3DC] border-[#f5dfae] text-[#8a6300]", icon: ScanLine, title: "Unrecognised QR code" },
+    absent: { tone: "bg-paper border-border text-text-secondary", icon: Info, title: "No QR code" },
+  };
+  const qrView = QR_VIEW[qr.status] || QR_VIEW.absent;
+  const QrIcon = qrView.icon;
 
   return (
     <AppShell>
@@ -241,13 +251,57 @@ export default function VerificationReview() {
             )}
           </div>
 
-          <p className="px-4 py-2 text-[11px] text-text-muted border-t border-border font-mono break-all">
-            SHA-256 {doc.fileHash}
-          </p>
+          <div className="px-4 py-2 border-t border-border space-y-1">
+            <p className="text-[11px] text-text-muted font-mono break-all">SHA-256 {doc.fileHash}</p>
+            {doc.readableBy?.length > 0 && (
+              <p className="text-[11px] text-text-muted flex items-center gap-1">
+                <Lock size={9} /> Encrypted at rest · decryptable by {doc.readableBy.join(" and ")}
+              </p>
+            )}
+          </div>
         </Card>
 
-        {/* Right — flags, fields, decision */}
+        {/* Right — authenticity, flags, fields, decision */}
         <div className="space-y-4">
+          {/* What the QR check could and could not establish. Only a
+              verified_source is presented as a confirmation. */}
+          {qr.status && (
+            <div className={`flex items-start gap-2.5 p-3 rounded-card border ${qrView.tone}`}>
+              <QrIcon size={15} className="mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold">{qrView.title}</p>
+                <p className="text-xs mt-0.5 leading-relaxed opacity-90">{qr.detail || qr.headline}</p>
+                {qr.link && qr.status === "issuer_reference" && (
+                  <a
+                    href={qr.link} target="_blank" rel="noreferrer"
+                    className="text-xs font-semibold underline inline-flex items-center gap-1 mt-1.5"
+                  >
+                    Open {qr.issuerHost} and confirm <ExternalLink size={11} />
+                  </a>
+                )}
+                {qr.status === "unrecognised_qr" && qr.payloads?.length > 0 && (
+                  <p className="text-[11px] font-mono mt-1 break-all opacity-80">{qr.payloads[0]}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {eligibility && !eligibility.eligible && (
+            <div className="flex items-start gap-2.5 p-3 rounded-card border bg-[#FFF3DC] border-[#f5dfae]">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
+              <div>
+                <p className="text-xs font-bold text-warning">
+                  Applicant does not currently meet {eligibility.programLabel} criteria
+                </p>
+                <p className="text-xs text-[#8a6300] mt-0.5 leading-relaxed">
+                  {eligibility.blockers.join(" ") ||
+                    `Marks not declared: ${eligibility.missing.join(", ")}.`}{" "}
+                  Verifying documents is still correct — enrolment is blocked separately.
+                </p>
+              </div>
+            </div>
+          )}
+
           {doc.flags?.length > 0 ? (
             <div className="space-y-2">
               {doc.flags.map((flag) => (

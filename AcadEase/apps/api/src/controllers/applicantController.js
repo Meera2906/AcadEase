@@ -15,7 +15,7 @@ import {
   sha256,
 } from "../utils/admissionRules.js";
 import { expectedFieldsFor, extractDocumentFields } from "../utils/documentExtract.js";
-import { inspectUpload, SIZE_LIMITS } from "../utils/imageInspect.js";
+import { inspectUpload, SIZE_LIMITS, IMAGE_LIMITS } from "../utils/imageInspect.js";
 import { checkDocumentAuthenticity, QR_FLAG_LABELS } from "../utils/qrAuthenticity.js";
 import { encryptDocument } from "../utils/documentCrypto.js";
 import { ELIGIBILITY_RULES, evaluateEligibility, qualifyingMinimumFor } from "../utils/eligibility.js";
@@ -126,7 +126,9 @@ export async function getApplicationOptions(req, res) {
     documentLabels: DOCUMENT_LABELS,
     limits: {
       maxBytes: SIZE_LIMITS.maxBytes,
-      minBytes: SIZE_LIMITS.minBytes,
+      minImageWidth: IMAGE_LIMITS.minWidth,
+      minImageHeight: IMAGE_LIMITS.minHeight,
+      recommendedDpi: IMAGE_LIMITS.recommendedDpi,
     },
   });
 }
@@ -421,7 +423,20 @@ export async function uploadMyDocument(req, res) {
     });
   }
 
-  // ── 3. Duplicate detection across the entire system, on the plaintext hash.
+  // ── 3. A PDF with no text layer and no embedded image is a blank page —
+  //       usually an export that went wrong. Nobody can review that.
+  const { extractedFields, extractionSource } = await extractDocumentFields(buffer, mimeType, documentType);
+  if (mimeType === "application/pdf" && extractionSource !== "pdf_text" && !authenticity.imagesScanned) {
+    return res.status(422).json({
+      error: "This PDF appears to be blank",
+      stage: "quality",
+      problems: [
+        "The file contains no readable text and no scanned image. Open it to check it exported correctly, then upload it again.",
+      ],
+    });
+  }
+
+  // ── 4. Duplicate detection across the entire system, on the plaintext hash.
   const fileHash = sha256(buffer);
   const hashMatches = await DocumentSubmission.find({ fileHash })
     .select("applicantId collegeId documentType createdAt")
@@ -443,8 +458,7 @@ export async function uploadMyDocument(req, res) {
     });
   }
 
-  // ── 4. Assistive field pre-fill and the standing rule-based flags.
-  const { extractedFields, extractionSource } = await extractDocumentFields(buffer, mimeType, documentType);
+  // ── 5. The standing rule-based flags, over the assistive pre-fill.
   const { flags, flagDetails } = computeFlags({
     applicant,
     extractedFields,
@@ -461,7 +475,7 @@ export async function uploadMyDocument(req, res) {
     });
   }
 
-  // ── 5. Encrypt, then write. Plaintext never reaches the disk.
+  // ── 6. Encrypt, then write. Plaintext never reaches the disk.
   const { ciphertext, encryption } = encryptDocument(buffer, { collegeId: applicant.collegeId });
 
   const storedName = `${crypto.randomUUID()}.enc`;

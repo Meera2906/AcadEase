@@ -7,9 +7,13 @@
 // No model decides whether a scan "looks" acceptable.
 
 export const SIZE_LIMITS = {
-  minBytes: 20 * 1024, // below this a "scan" is almost always a thumbnail
   maxBytes: 10 * 1024 * 1024,
   warnBytes: 8 * 1024 * 1024,
+  // Only meaningful for photographed/scanned images. A born-digital PDF (a
+  // DigiLocker download, a university-issued certificate) is routinely under
+  // 50 KB and perfectly legible, so file size is the wrong test for PDFs —
+  // they are judged on whether they actually carry content instead.
+  imageWarnBytes: 60 * 1024,
 };
 
 // A4 at 200 DPI ≈ 1654 x 2339. Government offices generally accept 200 DPI;
@@ -110,18 +114,18 @@ export function inspectUpload(buffer, mimeType) {
     warnings.push("File is very large and may be slow to open for the reviewer.");
   }
 
-  if (buffer.length < SIZE_LIMITS.minBytes) {
-    hardFailures.push(
-      `File is only ${Math.round(buffer.length / 1024)} KB. A readable scan of a certificate is normally 100 KB or more — this looks like a thumbnail or a truncated upload.`
-    );
-  }
-
   if (mimeType === "application/pdf") {
     if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
       hardFailures.push("This file is named as a PDF but its contents are not a PDF.");
     }
     metrics.kind = "pdf";
     return { ok: hardFailures.length === 0, hardFailures, warnings, metrics };
+  }
+
+  if (buffer.length < SIZE_LIMITS.imageWarnBytes) {
+    warnings.push(
+      `The scan is only ${Math.round(buffer.length / 1024)} KB. Check that small print is legible before submitting.`
+    );
   }
 
   const size = readImageSize(buffer, mimeType);

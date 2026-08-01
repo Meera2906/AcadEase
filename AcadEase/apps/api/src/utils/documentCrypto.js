@@ -23,7 +23,10 @@ import { fileURLToPath } from "url";
 // ---------------------------------------------------------------------------
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const KEY_DIR = path.resolve(__dirname, "../../secure-storage/keys");
+// Overridable so tests can use a throwaway keyring instead of the real one.
+const KEY_DIR = process.env.DOC_KEY_DIR
+  ? path.resolve(process.env.DOC_KEY_DIR)
+  : path.resolve(__dirname, "../../secure-storage/keys");
 
 export const TNTEU_KEY_ID = "tnteu";
 

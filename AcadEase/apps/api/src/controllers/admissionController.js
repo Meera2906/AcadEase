@@ -174,7 +174,19 @@ const APPLICANT_HEADER_ALIASES = {
   roll: "rollNumber",
   category: "category",
   community: "category",
+  // Marks drive the eligibility gate, so a university submitting on an
+  // applicant's behalf has to supply them too.
+  tenthpercentage: "tenthPercentage",
+  tenth: "tenthPercentage",
+  twelfthpercentage: "twelfthPercentage",
+  twelfth: "twelfthPercentage",
+  ugpercentage: "ugPercentage",
+  ug: "ugPercentage",
+  bedpercentage: "bedPercentage",
+  bed: "bedPercentage",
 };
+
+const MARK_FIELDS = ["tenthPercentage", "twelfthPercentage", "ugPercentage", "bedPercentage"];
 
 function normalizeApplicantRow(record) {
   const row = {};
@@ -196,7 +208,22 @@ function validateApplicantRow(row) {
   else if (!["BEd", "MEd"].includes(row.program)) errors.push('program must be "BEd" or "MEd"');
   if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("email is not a valid address");
   if (row.phone && !/^[0-9+\-\s]{6,15}$/.test(row.phone)) errors.push("phone is not a valid number");
+
+  for (const field of MARK_FIELDS) {
+    if (!row[field]) continue;
+    const value = Number(row[field]);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      errors.push(`${field} must be a percentage between 0 and 100`);
+    }
+  }
+
   return errors;
+}
+
+function marksFrom(row) {
+  return Object.fromEntries(
+    MARK_FIELDS.map((field) => [field, row[field] ? Number(row[field]) : null])
+  );
 }
 
 // POST /api/admissions/batches/applicants   (multipart: file=<csv>)
@@ -252,10 +279,20 @@ export async function importApplicants(req, res) {
     }
 
     seenInFile.add(row.applicantId);
+    const marks = marksFrom(row);
+    const eligibility = evaluateEligibility({ ...row, ...marks });
+
     toInsert.push({
       applicantId: row.applicantId,
       collegeId,
       batchId,
+      ...marks,
+      eligibility: {
+        eligible: eligibility.eligible,
+        evaluatedAt: new Date(),
+        minimumRequired: eligibility.minimumRequired,
+        blockers: eligibility.blockers,
+      },
       name: row.name,
       program: row.program,
       dob: row.dob || null,
@@ -275,6 +312,10 @@ export async function importApplicants(req, res) {
       outcome: "imported",
       errors: [],
       requiredDocuments: requiredDocumentsFor(row.program),
+      // Surfaced in the import report so the university sees, at import time,
+      // which of their applicants will not clear the eligibility gate later.
+      eligible: eligibility.eligible,
+      eligibilityBlockers: [...eligibility.blockers, ...(eligibility.missing.length ? ["marks not supplied"] : [])],
     });
   }
 

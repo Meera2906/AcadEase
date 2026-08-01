@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, ShieldCheck, ScanLine, KeyRound, Copy, Check, ArrowLeft } from "lucide-react";
+import { GraduationCap, ShieldCheck, ScanLine, KeyRound, Copy, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import Button from "../components/ui/Button.jsx";
 
@@ -266,6 +266,21 @@ export default function Login() {
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? "Signing in…" : "Sign in"}
               </Button>
+
+              {/* Applicants have no account here yet — they start in the
+                  pre-admission portal and only appear on this page once
+                  TNTEU has verified their documents and they are enrolled. */}
+              <div className="mt-5 pt-5 border-t border-border text-center">
+                <p className="text-xs text-text-secondary">
+                  Applying for a B.Ed or M.Ed seat?
+                </p>
+                <a
+                  href="/apply"
+                  className="inline-flex items-center gap-1.5 mt-1.5 text-sm text-signal font-semibold hover:underline"
+                >
+                  Start your admission application <ArrowRight size={14} />
+                </a>
+              </div>
 
               <div className="mt-6 p-3 bg-white border border-border rounded-card">
                 <p className="text-xs text-text-muted font-medium mb-1">Demo credentials</p>

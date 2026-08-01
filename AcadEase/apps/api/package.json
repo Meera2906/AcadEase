@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AcadEase backend — Express + MongoDB API for the SheBuilds TNTEU problem statement",
+  "description": "AcadEase backend \u00e2\u20ac\u201d Express + MongoDB API for the SheBuilds TNTEU problem statement",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
-    "seed:admissions": "node src/seed/seedAdmissions.js"
+    "seed:admissions": "node src/seed/seedAdmissions.js",
+    "test": "node --test test/*.test.js",
+    "e2e:admissions": "node e2e-admissions.mjs",
+    "e2e:preadmission": "node e2e-preadmission.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
