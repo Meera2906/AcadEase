@@ -19,7 +19,10 @@ import AdminDepartments from "./pages/admin/Departments.jsx";
 import AdminCourses from "./pages/admin/Courses.jsx";
 import AdminCertificates from "./pages/admin/Certificates.jsx";
 import AdminGrievances from "./pages/admin/Grievances.jsx";
-import AdminAnnouncements from "./pages/admin/Announcements.jsx";
+import AdminCirculars from "./pages/admin/Circulars.jsx";
+import CollegeAnalytics from "./pages/admin/CollegeAnalytics.jsx";
+import UmisStudents from "./pages/admin/UmisStudents.jsx";
+import UmisStudentDetail from "./pages/admin/UmisStudentDetail.jsx";
 import AdminAttendance from "./pages/admin/Attendance.jsx";
 import AdminMarks from "./pages/admin/Marks.jsx";
 import AdminReports from "./pages/admin/Reports.jsx";
@@ -64,7 +67,7 @@ export default function App() {
       <Route path="/student/grievances" element={<ProtectedRoute roles={["student"]}><StudentGrievances /></ProtectedRoute>} />
       <Route path="/student/od-requests" element={<ProtectedRoute roles={["student"]}><StudentOdRequests /></ProtectedRoute>} />
       <Route path="/student/study-materials" element={<ProtectedRoute roles={["student"]}><StudyMaterialsPage /></ProtectedRoute>} />
-      <Route path="/admin/study-materials" element={<ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}><StudyMaterialsPage /></ProtectedRoute>} />
+      <Route path="/admin/study-materials" element={<ProtectedRoute roles={["college_admin", "faculty"]}><StudyMaterialsPage /></ProtectedRoute>} />
 
       <Route path="/student/admission" element={<ProtectedRoute roles={["student"]}><StudentAdmissionStatus /></ProtectedRoute>} />
 
@@ -102,18 +105,28 @@ export default function App() {
       <Route path="/admin/university-requests" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><UniversityRequests /></ProtectedRoute>} />
       <Route path="/admin/university-requests/:requestId" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><UniversityRequestDetail /></ProtectedRoute>} />
 
-      {/* Admin / SuperAdmin — full module suite */}
+      {/* TNTEU (super admin) only — cross-college oversight */}
+      <Route path="/admin/analytics" element={<ProtectedRoute roles={["tnteu_admin"]}><CollegeAnalytics /></ProtectedRoute>} />
+      <Route path="/admin/umis" element={<ProtectedRoute roles={["tnteu_admin"]}><UmisStudents /></ProtectedRoute>} />
+      <Route path="/admin/umis/:userId" element={<ProtectedRoute roles={["tnteu_admin"]}><UmisStudentDetail /></ProtectedRoute>} />
+
+      {/* Admin / SuperAdmin — full module suite. The day-to-day academic
+          modules (results, attendance, grievances, reports, study materials)
+          belong to the college that runs them; TNTEU sees the same ground
+          through College-wise Analysis and the UMIS register instead. */}
       <Route path="/admin/dashboard" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminUsers /></ProtectedRoute>} />
       <Route path="/admin/departments" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminDepartments /></ProtectedRoute>} />
       <Route path="/admin/courses" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminCourses /></ProtectedRoute>} />
       <Route path="/admin/certificates" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminCertificates /></ProtectedRoute>} />
-      <Route path="/admin/grievances" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminGrievances /></ProtectedRoute>} />
-      <Route path="/admin/attendance" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminAttendance /></ProtectedRoute>} />
-      <Route path="/admin/results" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminMarks /></ProtectedRoute>} />
-      <Route path="/admin/marks" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminMarks /></ProtectedRoute>} />
-      <Route path="/admin/announcements" element={<ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}><AdminAnnouncements /></ProtectedRoute>} />
-      <Route path="/admin/reports" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminReports /></ProtectedRoute>} />
+      <Route path="/admin/grievances" element={<ProtectedRoute roles={["college_admin"]}><AdminGrievances /></ProtectedRoute>} />
+      <Route path="/admin/attendance" element={<ProtectedRoute roles={["college_admin"]}><AdminAttendance /></ProtectedRoute>} />
+      <Route path="/admin/results" element={<ProtectedRoute roles={["college_admin"]}><AdminMarks /></ProtectedRoute>} />
+      <Route path="/admin/marks" element={<ProtectedRoute roles={["college_admin"]}><AdminMarks /></ProtectedRoute>} />
+      <Route path="/admin/circulars" element={<ProtectedRoute roles={["college_admin", "tnteu_admin", "faculty"]}><AdminCirculars /></ProtectedRoute>} />
+      {/* Pre-rename spelling — anything still linking here lands on the same screen. */}
+      <Route path="/admin/announcements" element={<Navigate to="/admin/circulars" replace />} />
+      <Route path="/admin/reports" element={<ProtectedRoute roles={["college_admin"]}><AdminReports /></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute roles={["college_admin", "tnteu_admin"]}><AdminProfile /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" replace />} />

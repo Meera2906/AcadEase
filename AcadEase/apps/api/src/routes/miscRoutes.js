@@ -9,12 +9,13 @@ import {
   getAdminDashboard, getStudentProfile,
   listDepartments, createDepartment, updateDepartment,
   listCourses, createCourse, updateCourse, deleteCourse,
-  listAnnouncements, createAnnouncement, deleteAnnouncement,
-  listStudentAnnouncements,
+  listCirculars, createCircular, deleteCircular, listMyCirculars,
   uploadStudyMaterial, listStudyMaterials, deleteStudyMaterial, processPyqPractice,
   getAttendanceReport, getMarksReport,
   getStudentXp, getLeaderboard,
 } from "../controllers/miscController.js";
+import { getCollegeAnalytics } from "../controllers/analyticsController.js";
+import { listUmisStudents, getUmisStudent, getUmisFilters } from "../controllers/umisController.js";
 
 const router = Router();
 
@@ -55,13 +56,25 @@ router.post("/admin/courses", requireRole("college_admin", "tnteu_admin"), async
 router.patch("/admin/courses/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(updateCourse));
 router.delete("/admin/courses/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteCourse));
 
-// Admin: announcements
-router.get("/admin/announcements", asyncHandler(listAnnouncements));
-router.post("/admin/announcements", requireRole("college_admin", "tnteu_admin", "faculty"), asyncHandler(createAnnouncement));
-router.delete("/admin/announcements/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteAnnouncement));
+// Circular distribution. /announcements is the pre-rename spelling and stays
+// mounted so older clients keep working.
+const circularAuthors = requireRole("college_admin", "college_coordinator", "tnteu_admin", "faculty");
+router.get("/admin/circulars", asyncHandler(listCirculars));
+router.post("/admin/circulars", circularAuthors, asyncHandler(createCircular));
+router.delete("/admin/circulars/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteCircular));
+router.get("/admin/announcements", asyncHandler(listCirculars));
+router.post("/admin/announcements", circularAuthors, asyncHandler(createCircular));
+router.delete("/admin/announcements/:id", requireRole("college_admin", "tnteu_admin"), asyncHandler(deleteCircular));
 
-// Student/Faculty: view announcements targeted to their role
-router.get("/announcements", asyncHandler(listStudentAnnouncements));
+// The read-only feed for whoever is asking, filtered to their audience group.
+router.get("/circulars", asyncHandler(listMyCirculars));
+router.get("/announcements", asyncHandler(listMyCirculars));
+
+// TNTEU only: college-wise analysis and the UMIS student register
+router.get("/admin/analytics/colleges", requireRole("tnteu_admin"), asyncHandler(getCollegeAnalytics));
+router.get("/umis/filters", requireRole("tnteu_admin"), asyncHandler(getUmisFilters));
+router.get("/umis/students", requireRole("tnteu_admin"), asyncHandler(listUmisStudents));
+router.get("/umis/students/:userId", requireRole("tnteu_admin"), asyncHandler(getUmisStudent));
 
 // Study materials
 router.post("/study-materials", requireRole("college_admin", "tnteu_admin", "faculty"), studyMaterialUpload.single("file"), asyncHandler(uploadStudyMaterial));

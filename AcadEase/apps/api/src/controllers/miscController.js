@@ -16,6 +16,10 @@ import {
   XpLedger,
   Announcement,
   StudyMaterial,
+  CIRCULAR_AUDIENCES,
+  audienceForRole,
+  rolesForAudiences,
+  normalizeAudiences,
 } from "../models/index.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 import { validateUploadedFile } from "../utils/fileSecurity.js";
@@ -854,67 +858,119 @@ export async function deleteCourse(req, res) {
   res.json({ message: "Course deleted" });
 }
 
-// ---------- Admin: announcements ----------
+// ---------- Circular distribution ----------
+// Formerly "announcements". A circular carries a set of audiences (students /
+// faculty / admins, any combination) and a scope: TNTEU issues university-wide
+// circulars that reach every affiliated college; a college issues its own.
 
-// GET /api/admin/announcements
-export async function listAnnouncements(req, res) {
-  const announcements = await Announcement.find({ institutionId: req.user.institutionId })
-    .sort({ createdAt: -1 });
-  res.json({ announcements });
+const TNTEU_ROLES = ["tnteu_admin", "superadmin"];
+const isUniversityAdmin = (req) => TNTEU_ROLES.includes(req.user.role);
+const homeCollegeId = (req) => req.user.collegeId || req.user.institutionId || null;
+
+// What a given caller is allowed to see in the circular register: everything
+// for TNTEU, and university-wide plus own-college circulars for everyone else.
+function circularVisibility(req) {
+  if (isUniversityAdmin(req)) return {};
+  const mine = [homeCollegeId(req), req.user.institutionId, req.user.collegeId].filter(Boolean);
+  return {
+    $or: [
+      { scope: "university" },
+      { collegeId: { $in: mine } },
+      { institutionId: { $in: mine } },
+    ],
+  };
 }
 
-// POST /api/admin/announcements
-export async function createAnnouncement(req, res) {
-  const { title, body, audience } = req.body;
+// GET /api/admin/circulars  (alias: /api/admin/announcements)
+export async function listCirculars(req, res) {
+  const filter = circularVisibility(req);
+  if (req.query.audience) filter.audiences = req.query.audience;
+  if (req.query.scope) filter.scope = req.query.scope;
+
+  const circulars = await Announcement.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+  res.json({ circulars, announcements: circulars });
+}
+
+// POST /api/admin/circulars  (alias: /api/admin/announcements)
+export async function createCircular(req, res) {
+  const { title, body } = req.body;
   if (!title || !body) return res.status(400).json({ error: "title and body required" });
 
-  const ann = await Announcement.create({
-    title,
-    body,
-    audience: audience || "all",
+  const audiences = normalizeAudiences(req.body.audiences ?? req.body.audience);
+  const scope = isUniversityAdmin(req) ? "university" : "college";
+  const collegeId = homeCollegeId(req);
+  if (!collegeId) return res.status(400).json({ error: "Your account is not linked to an institution" });
+
+  const author = await User.findOne({ userId: req.user.userId }).select("name").lean();
+  const circular = await Announcement.create({
+    title: String(title).trim().slice(0, 200),
+    body: String(body).trim().slice(0, 5000),
+    audiences,
+    // The legacy single-value field stays consistent with the set.
+    audience: audiences.length === CIRCULAR_AUDIENCES.length ? "all" : audiences[0],
+    scope,
+    collegeId,
     createdBy: req.user.userId,
-    institutionId: req.user.institutionId,
+    createdByName: author?.name || req.user.userId,
+    createdByRole: req.user.role,
+    institutionId: req.user.institutionId || collegeId,
   });
 
-  // Push in-app notification to all relevant users
-  const roleFilter = audience === "students" ? "student" : audience === "faculty" ? "faculty" : null;
-  const userFilter = { institutionId: req.user.institutionId };
-  if (roleFilter) userFilter.role = roleFilter;
-  const users = await User.find(userFilter).select("userId role");
+  // Fan out to in-app notifications. A TNTEU circular is not restricted to one
+  // institution — that is the whole reason it exists.
+  const userFilter = { role: { $in: rolesForAudiences(audiences) }, isActive: { $ne: false } };
+  if (scope === "college") {
+    userFilter.$or = [{ collegeId }, { institutionId: req.user.institutionId || collegeId }];
+  }
+
+  const recipients = await User.find(userFilter).select("userId role").lean();
   const { pushNotification } = await import("../utils/notify.js");
   await Promise.all(
-    users.map((u) =>
+    recipients.map((u) =>
       pushNotification({
         userId: u.userId,
         type: "announcement",
         priority: "medium",
         title,
         message: body,
-        linkTo: u.role === "student" ? "/student/dashboard" : "/admin/announcements",
-      })
+        linkTo: u.role === "student" ? "/student/dashboard" : "/admin/circulars",
+      }).catch(() => {})
     )
   );
 
-  res.status(201).json({ announcement: ann });
+  res.status(201).json({
+    circular,
+    announcement: circular,
+    delivered: recipients.length,
+    message: `Circular distributed to ${recipients.length} recipient(s).`,
+  });
 }
 
-// DELETE /api/admin/announcements/:id
-export async function deleteAnnouncement(req, res) {
-  await Announcement.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
+// DELETE /api/admin/circulars/:id
+export async function deleteCircular(req, res) {
+  const circular = await Announcement.findById(req.params.id);
+  if (!circular) return res.status(404).json({ error: "Circular not found" });
+  // A college cannot withdraw a circular TNTEU sent it.
+  if (!isUniversityAdmin(req) && circular.scope === "university") {
+    return res.status(403).json({ error: "University circulars can only be withdrawn by TNTEU" });
+  }
+  if (!isUniversityAdmin(req) && circular.collegeId !== homeCollegeId(req)) {
+    return res.status(403).json({ error: "This circular belongs to another college" });
+  }
+  await circular.deleteOne();
+  res.json({ message: "Circular withdrawn" });
 }
 
-// GET /api/announcements — student/faculty-facing
-export async function listStudentAnnouncements(req, res) {
-  const role = req.user.role;
-  const announcements = await Announcement.find({
-    institutionId: req.user.institutionId,
-    $or: [
-      { audience: "all" },
-      { audience: role === "student" ? "students" : "faculty" },
-    ],
-  }).sort({ createdAt: -1 });
-  res.json({ announcements });
+// GET /api/circulars — the read-only feed for whoever is asking
+export async function listMyCirculars(req, res) {
+  const group = audienceForRole(req.user.role);
+  const filter = {
+    ...circularVisibility(req),
+    $and: [{ $or: [{ audiences: group }, { audiences: { $size: 0 } }, { audience: "all" }] }],
+  };
+
+  const circulars = await Announcement.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+  res.json({ circulars, announcements: circulars });
 }
 
 // ---------- Admin: reports ----------

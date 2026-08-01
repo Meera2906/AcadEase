@@ -13,7 +13,13 @@ export { default as Certificate } from "./Certificate.js";
 export { default as Grievance } from "./Grievance.js";
 export { default as Notification } from "./Notification.js";
 export { default as XpLedger } from "./XpLedger.js";
-export { default as Announcement } from "./Announcement.js";
+export {
+  default as Announcement,
+  CIRCULAR_AUDIENCES,
+  audienceForRole,
+  rolesForAudiences,
+  normalizeAudiences,
+} from "./Announcement.js";
 export { default as StudyMaterial } from "./StudyMaterial.js";
 export { default as AuditLog } from "./AuditLog.js";
 export { default as Applicant } from "./Applicant.js";

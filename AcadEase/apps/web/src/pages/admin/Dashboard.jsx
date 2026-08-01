@@ -94,10 +94,10 @@ export default function AdminDashboard() {
             </p>
           </div>
           <button
-            onClick={() => navigate("/admin/announcements")}
+            onClick={() => navigate("/admin/circulars")}
             className="flex items-center gap-2 bg-signal text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-signal-dark transition-colors shadow-card"
           >
-            <Megaphone size={15} /> New Announcement
+            <Megaphone size={15} /> New Circular
           </button>
         </div>
 
@@ -146,7 +146,7 @@ export default function AdminDashboard() {
             <QuickCard icon={TrendingUp}         label="Marks & Results"    sub="Approve & publish"      to="/admin/marks"         color="bg-coral" count={data?.resultsPendingCount} />
             <QuickCard icon={FileBadge}          label="Certificates"       sub="Approve requests"       to="/admin/certificates"  color="bg-signal" count={data?.pendingCertificates} />
             <QuickCard icon={MessageSquareWarning} label="Grievances"       sub="Review & resolve"       to="/admin/grievances"    color="bg-danger" count={data?.pendingGrievances} />
-            <QuickCard icon={Megaphone}          label="Announcements"      sub="Notices & circulars"    to="/admin/announcements" color="bg-ink" />
+            <QuickCard icon={Megaphone}          label="Circulars"          sub="Notices & circulars"    to="/admin/circulars" color="bg-ink" />
             <QuickCard icon={BarChart2}          label="Reports"            sub="Analytics & exports"    to="/admin/reports"       color="bg-teal" />
             <QuickCard icon={GraduationCap}      label="Enrollment"         sub="Student admission"      to="/admin/users"         color="bg-success" />
           </div>

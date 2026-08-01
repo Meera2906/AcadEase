@@ -108,8 +108,8 @@ export default function FacultyDashboard() {
               {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </p>
           </div>
-          <button onClick={() => navigate("/admin/announcements")} className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2 text-sm font-semibold text-white shadow-card hover:bg-signal-dark">
-            <Megaphone size={15} /> New announcement
+          <button onClick={() => navigate("/admin/circulars")} className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2 text-sm font-semibold text-white shadow-card hover:bg-signal-dark">
+            <Megaphone size={15} /> New circular
           </button>
         </div>
 
@@ -155,7 +155,7 @@ export default function FacultyDashboard() {
             <QuickCard icon={ClipboardList} label="Results" sub="Enter marks and outcomes" to="/faculty/results" color="bg-success" />
             <QuickCard icon={BookOpen} label="Materials" sub="Upload lessons and notes" to="/admin/study-materials" color="bg-ink" />
             <QuickCard icon={MessageSquareWarning} label="OD Requests" sub="Review pending approvals" to="/faculty/od-requests" color="bg-danger" />
-            <QuickCard icon={Megaphone} label="Announcements" sub="Share updates quickly" to="/admin/announcements" color="bg-citrus" />
+            <QuickCard icon={Megaphone} label="Circulars" sub="Share updates quickly" to="/admin/circulars" color="bg-citrus" />
             <QuickCard icon={UserCheck} label="Profile" sub="Support student records" to="/faculty/profile" color="bg-teal" />
           </div>
         </div>
@@ -228,7 +228,7 @@ export default function FacultyDashboard() {
           </Card>
 
           <Card className="p-5">
-            <SectionHeader title="Recent announcements" to="/admin/announcements" navigate={navigate} />
+            <SectionHeader title="Recent circulars" to="/admin/circulars" navigate={navigate} />
             <div className="space-y-3">
               {announcements.slice(0, 4).map((item) => (
                 <div key={item._id} className="rounded-xl border border-border bg-paper p-3">
@@ -236,7 +236,7 @@ export default function FacultyDashboard() {
                   <p className="mt-1 text-xs text-text-muted">{item.body}</p>
                 </div>
               ))}
-              {announcements.length === 0 && <p className="text-sm text-text-muted">No announcements yet.</p>}
+              {announcements.length === 0 && <p className="text-sm text-text-muted">No circulars yet.</p>}
             </div>
           </Card>
         </div>

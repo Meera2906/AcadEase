@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
     "seed:admissions": "node src/seed/seedAdmissions.js",
+    "seed:governance": "node src/seed/seedGovernance.js",
     "reset:admissions": "node src/seed/resetAdmissions.js",
     "test": "node --test test/*.test.js",
     "e2e:admissions": "node e2e-admissions.mjs",
