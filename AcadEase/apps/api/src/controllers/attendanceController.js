@@ -6,6 +6,25 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const attendanceProofDir = path.join(__dirname, "../../storage/attendance-proofs");
+if (!fs.existsSync(attendanceProofDir)) fs.mkdirSync(attendanceProofDir, { recursive: true });
+
+export const attendanceProofUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, attendanceProofDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${req.user.userId}_absence_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [".pdf", ".jpg", ".jpeg", ".png"];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  },
+});
+
 const odDocDir = path.join(__dirname, "../../storage/od-docs");
 if (!fs.existsSync(odDocDir)) fs.mkdirSync(odDocDir, { recursive: true });
 
@@ -197,7 +216,17 @@ export async function getCourseAttendanceSheet(req, res) {
 // an absent notification for every student marked "absent" (not od/late).
 export async function markAttendance(req, res) {
   const facultyId = req.user.userId;
-  const { courseId, date, sessionTime = "09:00", records } = req.body;
+  let { courseId, date, sessionTime = "09:00", records } = req.body;
+  const explanation = req.body.absenceReason || "";
+  const proofDocPath = req.file ? `storage/attendance-proofs/${req.file.filename}` : null;
+
+  if (typeof records === "string") {
+    try {
+      records = JSON.parse(records);
+    } catch {
+      return res.status(400).json({ error: "records must be valid JSON" });
+    }
+  }
 
   if (!courseId || !date || !Array.isArray(records) || records.length === 0) {
     return res.status(400).json({ error: "courseId, date, and records[] are required" });
@@ -210,6 +239,10 @@ export async function markAttendance(req, res) {
   const absentStudents = [];
 
   for (const rec of records) {
+    const noteText = typeof rec.note === "string" ? rec.note.trim() : "";
+    const explanationText = noteText || explanation;
+    const sharedProofPath = rec.supportingDocPath || proofDocPath;
+
     const doc = await AttendanceRecord.findOneAndUpdate(
       { courseId, studentId: rec.studentId, date: new Date(date) },
       {
@@ -217,26 +250,29 @@ export async function markAttendance(req, res) {
           facultyId,
           sessionTime,
           status: rec.status,
-          note: rec.note || "",
+          note: explanationText,
+          supportingDocPath: rec.status === "absent" ? sharedProofPath : null,
           markedAt: new Date(),
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     results.push(doc);
-    if (rec.status === "absent") absentStudents.push(rec.studentId);
+    if (rec.status === "absent") absentStudents.push({ studentId: rec.studentId, explanation: explanationText, documentPath: sharedProofPath });
   }
 
   // Fire-and-forget notification pipeline — decoupled per PRD 10.1, but
   // awaited here since this is a single-process MVP with no queue worker.
   await Promise.all(
-    absentStudents.map((studentId) =>
+    absentStudents.map(({ studentId, explanation: explanationText, documentPath }) =>
       notifyAbsent({
         studentId,
         courseName: course.name,
         sessionTime,
         courseId,
         date,
+        explanation: explanationText,
+        documentPath,
       })
     )
   );

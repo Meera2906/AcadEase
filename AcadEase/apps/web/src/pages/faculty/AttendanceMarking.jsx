@@ -55,7 +55,7 @@ function Steps({ current }) {
 }
 
 // ── Confirmation popup ────────────────────────────────────────────────────────
-function ConfirmModal({ rows, course, hour, date, onConfirm, onCancel, submitting }) {
+function ConfirmModal({ rows, course, hour, date, onConfirm, onCancel, submitting, absenceReason, setAbsenceReason, proofFile, setProofFile}) {
   const present = rows.filter((r) => r.status === "present");
   const absent  = rows.filter((r) => r.status === "absent");
   const od      = rows.filter((r) => r.status === "od");
@@ -63,7 +63,7 @@ function ConfirmModal({ rows, course, hour, date, onConfirm, onCancel, submittin
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-lift w-full max-w-md">
+      <div className="bg-white rounded-card shadow-lift w-full max-w-lg">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-border">
           <div className="flex items-center gap-2 mb-1">
@@ -96,19 +96,42 @@ function ConfirmModal({ rows, course, hour, date, onConfirm, onCancel, submittin
 
         {/* Absent list preview */}
         {absent.length > 0 && (
-          <div className="px-6 pb-4">
-            <p className="text-xs font-semibold text-text-secondary mb-2 flex items-center gap-1">
-              <AlertTriangle size={12} className="text-danger" />
-              Absent students (will receive instant notification)
-            </p>
-            <div className="bg-danger/5 border border-danger/15 rounded-xl px-3 py-2 max-h-28 overflow-y-auto space-y-1">
-              {absent.map((r) => (
-                <div key={r.studentId} className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-text-primary">{r.name}</span>
-                  <span className="font-mono text-text-muted">{r.enrollmentNumber}</span>
-                </div>
-              ))}
+          <div className="px-6 pb-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-2 flex items-center gap-1">
+                <AlertTriangle size={12} className="text-danger" />
+                Absent students (will receive instant notification)
+              </p>
+              <div className="bg-danger/5 border border-danger/15 rounded-xl px-3 py-2 max-h-28 overflow-y-auto space-y-1">
+                {absent.map((r) => (
+                  <div key={r.studentId} className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-text-primary">{r.name}</span>
+                    <span className="font-mono text-text-muted">{r.enrollmentNumber}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            <label className="block text-xs font-medium text-text-secondary">
+              Absence explanation for student email + notification
+              <textarea
+                value={absenceReason}
+                onChange={(e) => setAbsenceReason(e.target.value)}
+                rows={3}
+                placeholder="Example: Student missed the class due to medical reason and submitted a valid note."
+                className="mt-1 w-full rounded-xl border border-border bg-paper px-3 py-2 text-sm text-text-primary resize-none focus:outline-none focus:ring-2 focus:ring-signal/20"
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-text-secondary">
+              Supporting document (PDF/JPG/PNG)
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                className="mt-1 block w-full text-sm text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-signal/10 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-signal"
+              />
+            </label>
           </div>
         )}
 
@@ -157,6 +180,8 @@ export default function FacultyAttendanceMarking() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]           = useState("");
+  const [absenceReason, setAbsenceReason] = useState("");
+  const [proofFile, setProofFile] = useState(null);
 
   const step = selectedCourse === null ? 1 : selectedHour === null ? 2 : 3;
 
@@ -199,11 +224,22 @@ export default function FacultyAttendanceMarking() {
     setSubmitting(true);
     setError("");
     try {
-      await api.post("/attendance/mark", {
-        courseId: selectedCourse.courseId,
-        date: today,
-        sessionTime: selectedHour,
-        records: rows.map(({ studentId, status }) => ({ studentId, status, note: "" })),
+      const formData = new FormData();
+      formData.append("courseId", selectedCourse.courseId);
+      formData.append("date", today);
+      formData.append("sessionTime", selectedHour);
+      formData.append("absenceReason", absenceReason);
+      if (proofFile) formData.append("proofDoc", proofFile);
+
+      const payload = rows.map(({ studentId, status, note }) => ({
+        studentId,
+        status,
+        note: note || absenceReason || "",
+      }));
+      formData.append("records", JSON.stringify(payload));
+
+      await api.post("/attendance/mark", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
       setShowConfirm(false);
       setSubmitted(true);
@@ -221,6 +257,8 @@ export default function FacultyAttendanceMarking() {
     setRows([]);
     setSubmitted(false);
     setError("");
+    setAbsenceReason("");
+    setProofFile(null);
   }
 
   const presentCount = rows.filter((r) => r.status === "present").length;
@@ -283,6 +321,10 @@ export default function FacultyAttendanceMarking() {
           onConfirm={handleSubmit}
           onCancel={() => setShowConfirm(false)}
           submitting={submitting}
+          absenceReason={absenceReason}
+          setAbsenceReason={setAbsenceReason}
+          proofFile={proofFile}
+          setProofFile={setProofFile}
         />
       )}
 

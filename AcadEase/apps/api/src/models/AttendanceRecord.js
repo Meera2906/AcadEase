@@ -17,6 +17,7 @@ const attendanceRecordSchema = new mongoose.Schema(
     editedAt: { type: Date, default: null },
     editedBy: { type: String, default: null },
     note: { type: String, default: "" }, // faculty-only, admin-visible
+    supportingDocPath: { type: String, default: null }, // optional proof/document for absence reason
   },
   { timestamps: true }
 );

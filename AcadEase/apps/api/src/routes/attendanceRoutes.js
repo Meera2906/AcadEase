@@ -16,6 +16,7 @@ import {
   getStudentOdRequests,
   reviewOdRequest,
   odDocUpload,
+  attendanceProofUpload,
 } from "../controllers/attendanceController.js";
 
 const router = Router();
@@ -27,7 +28,7 @@ router.get("/today-schedule/:studentId", asyncHandler(getTodaySchedule));
 router.get("/student/:studentId", asyncHandler(getStudentAttendance));
 router.get("/student/:studentId/summary", asyncHandler(getStudentSummary));
 router.get("/course/:courseId/date/:date", requireRole("faculty", "admin"), asyncHandler(getCourseAttendanceSheet));
-router.post("/mark", requireRole("faculty"), asyncHandler(markAttendance));
+router.post("/mark", requireRole("faculty"), attendanceProofUpload.single("proofDoc"), asyncHandler(markAttendance));
 router.patch("/:recordId", requireRole("faculty", "admin"), asyncHandler(editAttendanceRecord));
 router.get("/course/:courseId/analytics", requireRole("faculty", "admin"), asyncHandler(getCourseAnalytics));
 

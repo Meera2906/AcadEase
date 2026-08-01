@@ -17,7 +17,9 @@ import {
   Announcement,
   StudyMaterial,
 } from "../models/index.js";
+import { verifyAccessToken } from "../utils/jwt.js";
 import { validateUploadedFile } from "../utils/fileSecurity.js";
+import { registerNotificationStream, unregisterNotificationStream } from "../utils/notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const resumeDir = path.join(__dirname, "../../storage/resumes");
@@ -85,6 +87,30 @@ export const studyMaterialUpload = multer({
 });
 
 // ---------- Notifications ----------
+
+export function streamNotifications(req, res) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : req.query.access_token;
+
+  if (!token) {
+    return res.status(401).json({ error: "Missing access token" });
+  }
+
+  try {
+    const payload = verifyAccessToken(token);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+    res.write(`event: connected\ndata: ${JSON.stringify({ ok: true, userId: payload.userId })}\n\n`);
+
+    registerNotificationStream(payload.userId, res);
+    req.on("close", () => unregisterNotificationStream(payload.userId, res));
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired access token" });
+  }
+}
 
 // GET /api/notifications
 export async function listNotifications(req, res) {

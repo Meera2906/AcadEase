@@ -2,7 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
-  listNotifications, markAllRead, markOneRead, subscribePush,
+  listNotifications, markAllRead, markOneRead, subscribePush, streamNotifications,
   getMe, updateMe, uploadResume, deleteResume, resumeUpload,
   studyMaterialUpload,
   listUsers, createUser, editUser, bulkImportUsers,
@@ -17,6 +17,9 @@ import {
 } from "../controllers/miscController.js";
 
 const router = Router();
+
+// Notifications stream must be mounted before the global auth guard so it can accept the access token from the querystring.
+router.get("/notifications/stream", streamNotifications);
 router.use(requireAuth);
 
 // Notifications

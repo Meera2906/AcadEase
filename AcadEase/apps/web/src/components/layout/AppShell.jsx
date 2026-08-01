@@ -7,7 +7,7 @@ import {
   BookOpen, Megaphone, BarChart2, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import api from "../../api/client.js";
+import api, { getAccessToken } from "../../api/client.js";
 
 const NAV_BY_ROLE = {
   student: [
@@ -81,11 +81,41 @@ export default function AppShell({ children }) {
 
   useEffect(() => {
     if (!user) return;
+
     const load = () =>
       api.get("/notifications").then((r) => setNotifications(r.data.notifications)).catch(() => {});
+
     load();
+
+    const token = getAccessToken();
+    if (!token) return undefined;
+
+    const base = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api$/, "");
+    const streamUrl = new URL(`${base}/api/notifications/stream`);
+    streamUrl.searchParams.set("access_token", token);
+
+    const source = new EventSource(streamUrl.toString());
+    source.addEventListener("notification", (event) => {
+      const incoming = JSON.parse(event.data);
+      setNotifications((prev) => {
+        if (prev.some((n) => n._id === incoming._id)) return prev;
+        return [incoming, ...prev].slice(0, 50);
+      });
+    });
+
+    source.addEventListener("connected", () => {
+      load();
+    });
+
+    source.onerror = () => {
+      // The browser will retry automatically. We keep the latest state and re-fetch the list if the stream reconnects.
+    };
+
     const id = setInterval(load, 30000);
-    return () => clearInterval(id);
+    return () => {
+      source.close();
+      clearInterval(id);
+    };
   }, [user]);
 
   useEffect(() => {
