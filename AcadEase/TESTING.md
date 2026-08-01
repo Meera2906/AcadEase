@@ -140,6 +140,20 @@ the feature that ties the platform together, including the cases where it must
 
 Roughly 25 minutes end to end. Each step says what you should see.
 
+> **Re-running the demo?** The admission pipeline keeps what you imported last
+> time, so a second import rejects every row with *"applicantId already
+> submitted by your university"* and nothing new appears. That is correct — a
+> college must not be able to silently overwrite applicants it already
+> submitted — but it is not what you want mid-demo. Wipe it first:
+>
+> ```bash
+> cd AcadEase/apps/api && npm run reset:admissions
+> ```
+>
+> Removes the demo applicants, their documents (and the encrypted files), the
+> import batches and any student accounts minted by enrolment. Colleges, staff
+> logins and everything else are left alone.
+
 ### 2.1 Bulk submission (as `ADM_CSE_001`)
 
 1. **Bulk Submission** → upload `apps/api/demo-data/applicants.csv`.

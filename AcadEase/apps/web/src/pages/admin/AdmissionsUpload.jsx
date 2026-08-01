@@ -71,6 +71,11 @@ function Summary({ report }) {
       )}
       <span className="text-danger font-semibold">{report.failed} rejected</span>
       <span className="text-text-muted">{report.totalRows} total</span>
+      {report.hint && (
+        <p className="w-full mt-1 text-xs leading-relaxed text-text-secondary bg-[#FFF3DC] border border-warning/30 rounded-card px-3 py-2.5">
+          {report.hint}
+        </p>
+      )}
     </div>
   );
 }

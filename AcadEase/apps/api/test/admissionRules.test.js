@@ -136,3 +136,53 @@ test("the same bytes always hash to the same digest", () => {
   assert.equal(sha256(Buffer.from("marksheet")), sha256(Buffer.from("marksheet")));
   assert.notEqual(sha256(Buffer.from("marksheet")), sha256(Buffer.from("marksheet ")));
 });
+
+// Re-uploading a document into the slot it already occupies is a replacement,
+// not a duplicate. Before this was fixed, every file in a re-imported batch
+// flagged itself against its own previous version — which meant a second demo
+// run showed 35/35 flagged and nothing could be bulk-approved.
+test("replacing a document with the same file does not raise duplicate_resubmit", () => {
+  const { flags } = computeFlags({
+    applicant,
+    documentType: "10th_marksheet",
+    extractedFields: { name: "Anjali Murugan", registerNumber: "1024578901", yearOfPassing: "2018" },
+    extractionSource: "pdf_text",
+    expectedFields: ["name", "registerNumber", "yearOfPassing"],
+    // The row already sitting in this slot: same applicant, same type.
+    hashMatches: [{ applicantId: "APP_001", collegeId: "COL_1", documentType: "10th_marksheet" }],
+  });
+
+  assert.ok(!flags.includes("duplicate_resubmit"), `unexpected flags: ${flags.join(", ")}`);
+});
+
+test("the same file filed under a second document type still raises duplicate_resubmit", () => {
+  const { flags, flagDetails } = computeFlags({
+    applicant,
+    documentType: "transfer_certificate",
+    extractedFields: { name: "Anjali Murugan" },
+    extractionSource: "pdf_text",
+    expectedFields: ["name"],
+    // Already submitted as the 10th marksheet; now being reused as the TC.
+    hashMatches: [{ applicantId: "APP_001", collegeId: "COL_1", documentType: "10th_marksheet" }],
+  });
+
+  assert.ok(flags.includes("duplicate_resubmit"), `expected duplicate_resubmit, got: ${flags.join(", ")}`);
+  assert.equal(flagDetails.duplicate_resubmit.documentType, "10th_marksheet");
+});
+
+test("another applicant's copy still raises duplicate_hash even in the same slot", () => {
+  const { flags } = computeFlags({
+    applicant,
+    documentType: "10th_marksheet",
+    extractedFields: { name: "Anjali Murugan" },
+    extractionSource: "pdf_text",
+    expectedFields: ["name"],
+    hashMatches: [
+      { applicantId: "APP_001", collegeId: "COL_1", documentType: "10th_marksheet" }, // itself
+      { applicantId: "APP_009", collegeId: "COL_1", documentType: "10th_marksheet" }, // someone else
+    ],
+  });
+
+  assert.ok(flags.includes("duplicate_hash"), `expected duplicate_hash, got: ${flags.join(", ")}`);
+  assert.ok(!flags.includes("duplicate_resubmit"), `unexpected duplicate_resubmit: ${flags.join(", ")}`);
+});

@@ -549,6 +549,7 @@ export async function uploadMyDocument(req, res) {
   // ── 6. The standing rule-based flags, over the assistive pre-fill.
   const { flags, flagDetails } = computeFlags({
     applicant,
+    documentType,
     extractedFields,
     extractionSource,
     hashMatches,

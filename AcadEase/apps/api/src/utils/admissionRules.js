@@ -107,11 +107,14 @@ function parseLooseDate(value) {
  * @param {object} params.extractedFields   assistive pre-fill (may be empty)
  * @param {string} params.extractionSource  how the pre-fill was produced
  * @param {Array}  params.hashMatches       existing submissions sharing this file hash
+ * @param {string} params.documentType      the slot being written, so a replacement
+ *                                          of that same slot is not read as a duplicate
  * @param {Array}  params.expectedFields    field keys this document type should carry
  * @param {Date}   params.now               injected for testability
  */
 export function computeFlags({
   applicant,
+  documentType = null,
   extractedFields = {},
   extractionSource = "none",
   hashMatches = [],
@@ -132,7 +135,15 @@ export function computeFlags({
     };
   }
 
-  const selfMatch = hashMatches.find((match) => match.applicantId === applicant.applicantId);
+  // Same applicant, same file, but filed under a *different* document type —
+  // e.g. one scan submitted as both the 10th marksheet and the transfer
+  // certificate. Matches in the same slot are excluded deliberately: replacing
+  // a document with a corrected copy of itself is a resubmission, not a
+  // duplicate, and flagging it made every re-upload look suspicious while
+  // making nothing bulk-approvable.
+  const selfMatch = hashMatches.find(
+    (match) => match.applicantId === applicant.applicantId && match.documentType !== documentType
+  );
   if (selfMatch) {
     flags.push("duplicate_resubmit");
     details.duplicate_resubmit = { documentType: selfMatch.documentType };

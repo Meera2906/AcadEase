@@ -362,6 +362,15 @@ export async function importApplicants(req, res) {
     metadata: { totalRows: rows.length, imported, failed },
   });
 
+  // Re-importing the same file rejects every row, which is correct — a college
+  // must not be able to silently overwrite applicants it already submitted. But
+  // "0 imported, 9 rejected" with no further explanation reads as a broken
+  // upload, so say plainly what happened and what to do about it.
+  const allAlreadySubmitted =
+    imported === 0 &&
+    failed > 0 &&
+    rows.every((row) => row.errors?.some((e) => String(e).startsWith("applicantId already")));
+
   res.status(201).json({
     batchId,
     totalRows: rows.length,
@@ -369,7 +378,12 @@ export async function importApplicants(req, res) {
     failed,
     rows: reportRows,
     truncatedRows: Math.max(0, rows.length - reportRows.length),
-    message: `${imported} applicant(s) imported, ${failed} row(s) rejected.`,
+    hint: allAlreadySubmitted
+      ? "Every applicant in this file has already been submitted, so nothing was imported — this is not an upload failure. Their documents can still be uploaded in step 2, and will replace what is on file. To start the batch over from empty, run `npm run reset:admissions` on the server."
+      : undefined,
+    message: allAlreadySubmitted
+      ? `No new applicants — all ${failed} were already submitted by your university.`
+      : `${imported} applicant(s) imported, ${failed} row(s) rejected.`,
   });
 }
 
@@ -432,6 +446,7 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
 
   const { flags: ruleFlags, flagDetails } = computeFlags({
     applicant,
+    documentType,
     extractedFields,
     extractionSource,
     hashMatches,

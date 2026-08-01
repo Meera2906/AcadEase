@@ -265,6 +265,13 @@ and 35 document PDFs, several deliberately flawed) and inserts almost nothing.
 You upload that package through the UI, so the demo exercises the real import,
 hashing and flagging path. `demo-data/README.md` tabulates the planted issues.
 
+To run that upload demo again later, clear the pipeline first — otherwise every
+row is rejected as already submitted:
+
+```bash
+npm run reset:admissions
+```
+
 ### 4. Run
 
 ```bash
