@@ -99,7 +99,22 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 // Basic brute-force guard on auth endpoints (PRD 5.1.2 lockout policy is the
 // per-account version of this; this is the per-IP network-level version).
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50 });
+//
+// `skipSuccessfulRequests` is what makes this usable in a room. Several people
+// demonstrating different roles from the same venue WiFi share one public IP,
+// and every silent token refresh also lands on /api/auth — counting those, a
+// handful of laptops could exhaust a 50-request budget and lock the whole room
+// out mid-presentation. Only *failed* attempts count now, which is what a
+// brute-force guard is actually for, and per-account lockout after 5 failures
+// (authController) remains the real protection.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 100,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many failed attempts from this network. Try again in a few minutes." },
+});
 app.use("/api/auth", authLimiter);
 
 // Render pings this to keep the service marked healthy. It also answers the

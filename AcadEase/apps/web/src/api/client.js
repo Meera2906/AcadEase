@@ -18,6 +18,29 @@ export function getAccessToken() {
   return accessToken;
 }
 
+// The CSRF token is held in memory too, and the server now returns it in the
+// login / refresh response body.
+//
+// It used to be read out of `document.cookie`, which works only when the SPA
+// and the API share a hostname. Deployed they do not — the cookie belongs to
+// the API's origin and is invisible to script on the SPA's origin — so no
+// X-CSRF-Token header was ever sent and every POST/PATCH/DELETE came back
+// "CSRF token missing or invalid". The cookie is still set and still checked
+// server-side; this is just how the client learns the value it must echo.
+let csrfToken = null;
+
+export function setCsrfToken(token) {
+  if (token) csrfToken = token;
+}
+
+// Same-origin deployments keep working off the cookie.
+function readCsrfCookie() {
+  return document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("csrfToken="))
+    ?.split("=")[1];
+}
+
 api.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
@@ -25,13 +48,9 @@ api.interceptors.request.use((config) => {
 
   const method = (config.method || "get").toLowerCase();
   if (["post", "put", "patch", "delete"].includes(method)) {
-    const csrfToken = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("csrfToken="))
-      ?.split("=")[1];
-
-    if (csrfToken) {
-      config.headers["X-CSRF-Token"] = csrfToken;
+    const token = csrfToken || readCsrfCookie();
+    if (token) {
+      config.headers["X-CSRF-Token"] = token;
     }
   }
 
@@ -61,6 +80,7 @@ api.interceptors.response.use(
       try {
         const { data } = await api.post("/auth/refresh");
         setAccessToken(data.accessToken);
+        setCsrfToken(data.csrfToken);
         queue.forEach((p) => p.resolve(data.accessToken));
         queue = [];
         original.headers.Authorization = `Bearer ${data.accessToken}`;
@@ -69,6 +89,7 @@ api.interceptors.response.use(
         queue.forEach((p) => p.reject(refreshErr));
         queue = [];
         setAccessToken(null);
+        csrfToken = null;
         window.location.href = "/login";
         return Promise.reject(refreshErr);
       } finally {

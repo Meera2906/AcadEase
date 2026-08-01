@@ -11,11 +11,19 @@ export const applicantApi = axios.create({ baseURL, withCredentials: true });
 let applicantToken = null;
 export const setApplicantToken = (token) => { applicantToken = token; };
 
+// Held in memory and taken from the response body, because once the portal is
+// deployed the API sets this cookie on a different origin and script here
+// cannot read it — see the note in api/client.js.
+let applicantCsrf = null;
+export const setApplicantCsrf = (token) => { if (token) applicantCsrf = token; };
+
 applicantApi.interceptors.request.use((config) => {
   if (applicantToken) config.headers.Authorization = `Bearer ${applicantToken}`;
 
   if (["post", "put", "patch", "delete"].includes((config.method || "get").toLowerCase())) {
-    const csrf = document.cookie.split("; ").find((row) => row.startsWith("csrfToken="))?.split("=")[1];
+    const csrf =
+      applicantCsrf ||
+      document.cookie.split("; ").find((row) => row.startsWith("csrfToken="))?.split("=")[1];
     if (csrf) config.headers["X-CSRF-Token"] = csrf;
   }
   return config;
@@ -34,6 +42,7 @@ export function ApplicantProvider({ children }) {
       .post("/applicant/refresh")
       .then(({ data }) => {
         setApplicantToken(data.accessToken);
+        setApplicantCsrf(data.csrfToken);
         setApplicant(data.applicant);
       })
       .catch(() => {})
@@ -43,6 +52,7 @@ export function ApplicantProvider({ children }) {
   const register = useCallback(async (payload) => {
     const { data } = await applicantApi.post("/applicant/register", payload);
     setApplicantToken(data.accessToken);
+    setApplicantCsrf(data.csrfToken);
     setApplicant(data.applicant);
     return data;
   }, []);
@@ -50,6 +60,7 @@ export function ApplicantProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const { data } = await applicantApi.post("/applicant/login", { email, password });
     setApplicantToken(data.accessToken);
+    setApplicantCsrf(data.csrfToken);
     setApplicant(data.applicant);
     return data;
   }, []);
@@ -57,6 +68,7 @@ export function ApplicantProvider({ children }) {
   const logout = useCallback(async () => {
     await applicantApi.post("/applicant/logout").catch(() => {});
     setApplicantToken(null);
+    applicantCsrf = null;
     setApplicant(null);
   }, []);
 

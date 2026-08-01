@@ -16,6 +16,7 @@ import { signAccessToken } from "./src/utils/jwt.js";
 import { Applicant, DocumentSubmission, AdmissionBatch, User, AuditLog } from "./src/models/index.js";
 
 const CSRF = "test-csrf-token";
+const OTHER_COLLEGE = "TNTEU_COL_0912";
 let base;
 
 function tok(user) {
@@ -61,7 +62,7 @@ async function main() {
   base = `http://127.0.0.1:${server.address().port}`;
 
   const uniAdmin = tok({ userId: "ADM_CSE_001", role: "college_admin", collegeId: "TNTEU_COL_0417" });
-  const otherUni = tok({ userId: "ADM_0912_001", role: "college_admin", collegeId: "TNTEU_COL_0912" });
+  const otherUni = tok({ userId: "ADM_0912_001", role: "college_admin", collegeId: OTHER_COLLEGE });
   const tnteu = tok({ userId: "SUP_001", role: "tnteu_admin", collegeId: null });
 
   // ── 1. bulk applicant import ────────────────────────────────────────────
@@ -101,7 +102,15 @@ async function main() {
   // ── 3. tenant isolation ─────────────────────────────────────────────────
   console.log("\n3. A different university cannot see this data");
   const foreign = await call("GET", "/api/admissions/applicants", { token: otherUni });
-  check("other university sees 0 applicants", foreign.body.total === 0, `got ${foreign.body.total}`);
+  // Asserting a bare zero was only true while the other college had no
+  // applicants of its own — seed:governance now gives it some. What actually
+  // matters is that none of *this* batch leaks across, so assert that instead:
+  // it survives whatever else is in the database.
+  const leaked = (foreign.body.applicants || []).filter((a) => a.applicantId?.startsWith("APP_2025_"));
+  check("other university sees none of this college's applicants", leaked.length === 0,
+    `leaked ${leaked.length}: ${leaked.map((a) => a.applicantId).join(", ")}`);
+  check("what it does see belongs to it", (foreign.body.applicants || []).every((a) => a.collegeId === OTHER_COLLEGE),
+    JSON.stringify([...new Set((foreign.body.applicants || []).map((a) => a.collegeId))]));
   const foreignDetail = await call("GET", "/api/admissions/applicants/APP_2025_001", { token: otherUni });
   check("other university gets 404 on a foreign applicant", foreignDetail.status === 404);
 

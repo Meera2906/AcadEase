@@ -147,6 +147,13 @@ async function issueTokens(res, user) {
 
   return res.json({
     accessToken,
+    // Also returned in the body, not only as a cookie. Deployed, the SPA and the
+    // API are on different origins, and `document.cookie` on the SPA's origin
+    // can never see a cookie set by the API's origin — so the client could not
+    // read the token it is required to echo back, and every mutating request
+    // failed the CSRF check. Locally this was invisible: :5173 and :5000 share
+    // the host "localhost", and cookies ignore the port.
+    csrfToken,
     user: {
       userId: user.userId,
       role: user.role === "admin" ? "college_admin" : user.role === "superadmin" ? "tnteu_admin" : user.role,
@@ -180,7 +187,7 @@ export async function refresh(req, res) {
   const accessToken = signAccessToken(user);
   const csrfToken = crypto.randomBytes(32).toString("hex");
   res.cookie("csrfToken", csrfToken, { httpOnly: false, ...cookieOptions() });
-  return res.json({ accessToken });
+  return res.json({ accessToken, csrfToken });
 }
 
 // POST /api/auth/logout

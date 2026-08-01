@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback } from "react";
-import api, { setAccessToken } from "../api/client.js";
+import api, { setAccessToken, setCsrfToken } from "../api/client.js";
 
 const AuthContext = createContext(null);
 
@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
       const { data } = await api.post("/auth/login", { userId, password });
       if (data.accessToken) {
         setAccessToken(data.accessToken);
+        setCsrfToken(data.csrfToken);
         setUser(data.user);
       }
       return data;
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.post("/auth/verify-totp", { userId, token });
       setAccessToken(data.accessToken);
+      setCsrfToken(data.csrfToken);
       setUser(data.user);
       return data;
     } finally {

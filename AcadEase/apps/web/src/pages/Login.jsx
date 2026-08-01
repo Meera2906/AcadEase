@@ -248,7 +248,7 @@ export default function Login() {
                   type="text"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
-                  placeholder="STU_2021_CS_001"
+                  placeholder="Enter your User ID"
                   className="input font-mono"
                   required
                 />
@@ -280,16 +280,6 @@ export default function Login() {
                 >
                   Start your admission application <ArrowRight size={14} />
                 </a>
-              </div>
-
-              <div className="mt-6 p-3 bg-white border border-border rounded-card">
-                <p className="text-xs text-text-muted font-medium mb-1">Demo credentials</p>
-                <p className="text-xs font-mono text-text-secondary">
-                  Password: <span className="text-text-primary">Demo@2025</span>
-                </p>
-                <p className="text-xs text-text-muted mt-1">
-                  Student: STU_2021_CS_001 · Faculty: FAC_CSE_001 · Admin: ADM_CSE_001
-                </p>
               </div>
             </form>
           )}

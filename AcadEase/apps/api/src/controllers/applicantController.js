@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import { Applicant, DocumentSubmission, College, AuditLog } from "../models/index.js";
 import { signApplicantToken, signApplicantRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import { cookieOptions } from "./authController.js";
 import {
   DOCUMENT_LABELS,
   computeFlags,
@@ -125,24 +126,25 @@ function publicApplicant(applicant) {
   };
 }
 
+// Returns the CSRF token so the caller can put it in the response body. The
+// applicant portal is served from a different origin to this API once deployed,
+// where a cookie set here is unreadable from the SPA's `document.cookie` — so
+// the token has to travel in the body or the applicant's uploads all fail the
+// CSRF check. Same reasoning as the staff login.
 function startSession(res, applicant) {
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+
   res.cookie("applicantRefresh", signApplicantRefreshToken(applicant), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    ...cookieOptions(),
     path: "/api/applicant",
   });
 
   // Same double-submit CSRF pattern the staff login uses, so the applicant's
   // subsequent uploads carry a token the global guard can check.
-  res.cookie("csrfToken", crypto.randomBytes(32).toString("hex"), {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("csrfToken", csrfToken, { httpOnly: false, ...cookieOptions() });
+
+  return csrfToken;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,11 +225,12 @@ export async function registerApplicant(req, res) {
 
     await audit(existing.applicantId, "applicant_account_claimed", { email: normalizedEmail }, existing.collegeId);
 
-    startSession(res, existing);
+    const claimCsrf = startSession(res, existing);
     return res.status(200).json({
       message: "We found an application your university had already started for you.",
       claimed: true,
       accessToken: signApplicantToken(existing),
+      csrfToken: claimCsrf,
       applicant: publicApplicant(existing),
     });
   }
@@ -252,11 +255,12 @@ export async function registerApplicant(req, res) {
 
   await audit(applicantId, "applicant_registered", { collegeId, program }, collegeId);
 
-  startSession(res, applicant);
+  const registerCsrf = startSession(res, applicant);
 
   res.status(201).json({
     message: "Application started",
     accessToken: signApplicantToken(applicant),
+    csrfToken: registerCsrf,
     applicant: publicApplicant(applicant),
   });
 }
@@ -299,9 +303,9 @@ export async function loginApplicant(req, res) {
   applicant.lastLogin = new Date();
   await applicant.save();
 
-  startSession(res, applicant);
+  const loginCsrf = startSession(res, applicant);
 
-  res.json({ accessToken: signApplicantToken(applicant), applicant: publicApplicant(applicant) });
+  res.json({ accessToken: signApplicantToken(applicant), csrfToken: loginCsrf, applicant: publicApplicant(applicant) });
 }
 
 // POST /api/applicant/refresh
@@ -320,13 +324,23 @@ export async function refreshApplicantToken(req, res) {
   const applicant = await Applicant.findOne({ applicantId: payload.applicantId });
   if (!applicant || applicant.studentUserId) return res.status(401).json({ error: "Session is no longer valid" });
 
-  res.json({ accessToken: signApplicantToken(applicant), applicant: publicApplicant(applicant) });
+  const refreshCsrf = crypto.randomBytes(32).toString("hex");
+  res.cookie("csrfToken", refreshCsrf, { httpOnly: false, ...cookieOptions() });
+
+  res.json({
+    accessToken: signApplicantToken(applicant),
+    csrfToken: refreshCsrf,
+    applicant: publicApplicant(applicant),
+  });
 }
 
 // POST /api/applicant/logout
 export async function logoutApplicant(req, res) {
-  res.clearCookie("applicantRefresh", { path: "/api/applicant" });
-  res.clearCookie("csrfToken");
+  // Clearing a cookie only works if the attributes match the ones it was set
+  // with, otherwise the browser keeps it.
+  const { maxAge, ...clearOptions } = cookieOptions();
+  res.clearCookie("applicantRefresh", { ...clearOptions, path: "/api/applicant" });
+  res.clearCookie("csrfToken", clearOptions);
   res.json({ message: "Signed out" });
 }
 
