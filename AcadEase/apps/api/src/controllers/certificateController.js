@@ -497,12 +497,10 @@ export async function downloadCertificate(req, res) {
   cert.downloadCount += 1;
   await cert.save();
 
-  res.json({
-    certId: cert.certId,
-    downloadToken: cert.downloadUrlToken,
-    expiresAt: cert.downloadUrlExpiresAt,
-    pdfPath: cert.pdfPath,
-  });
+  const physicalPath = cert.pdfPath.replace(/^\/+/, "");
+  const fileName = `${cert.certId}.pdf`;
+
+  res.download(physicalPath, fileName);
 }
 
 // GET /api/certificates/verify/:certId  (public, no auth)

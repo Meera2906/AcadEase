@@ -108,13 +108,18 @@ export default function StudentCertificates() {
 
   async function handleDownload(certId) {
     try {
-      const res = await api.get(`/certificates/download/${certId}`);
-      const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "") || "http://localhost:5000";
-      const pdfPath = res.data.pdfPath;
-      if (!pdfPath) { showToast("PDF not available yet.", "error"); return; }
-      window.open(`${base}/${pdfPath.replace(/^\/+/, "")}`, "_blank");
+      const res = await api.get(`/certificates/download/${certId}`, { responseType: "blob" });
+      const blob = new Blob([res.data], { type: res.headers["content-type"] || "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${certId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch {
-      showToast("Failed to get download link.", "error");
+      showToast("Failed to download certificate.", "error");
     }
   }
 
