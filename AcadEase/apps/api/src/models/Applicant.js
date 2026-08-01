@@ -19,6 +19,40 @@ const applicantSchema = new mongoose.Schema(
     rollNumber: { type: String, default: null, index: true },
     category: { type: String, default: null },
 
+    // ── Pre-admission self-service account ──────────────────────────────
+    // An applicant is not a User. They hold a temporary, tightly scoped login
+    // that can do exactly two things: manage their own documents and watch
+    // their own status. It stops working the moment they become a student.
+    passwordHash: { type: String, default: null },
+    refreshTokenHash: { type: String, default: null },
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockedUntil: { type: Date, default: null },
+    lastLogin: { type: Date, default: null },
+    source: { type: String, enum: ["self", "university_bulk"], default: "university_bulk" },
+
+    // Self-declared marks, checked against the uploaded documents by a human
+    // before enrolment. Drives the deterministic eligibility gate.
+    tenthPercentage: { type: Number, default: null },
+    twelfthPercentage: { type: Number, default: null },
+    ugPercentage: { type: Number, default: null },
+    bedPercentage: { type: Number, default: null },
+
+    eligibility: {
+      eligible: { type: Boolean, default: false },
+      evaluatedAt: { type: Date, default: null },
+      minimumRequired: { type: Number, default: null },
+      blockers: [{ type: String }],
+    },
+
+    // "draft" while the applicant is still uploading; only a submitted
+    // application enters TNTEU's queue.
+    stage: {
+      type: String,
+      enum: ["draft", "submitted", "enrolled"],
+      default: "submitted",
+      index: true,
+    },
+
     status: {
       type: String,
       enum: ["submitted", "under_review", "verified", "rejected"],
@@ -42,5 +76,6 @@ const applicantSchema = new mongoose.Schema(
 
 applicantSchema.index({ collegeId: 1, status: 1, submittedAt: -1 });
 applicantSchema.index({ collegeId: 1, rollNumber: 1 });
+applicantSchema.index({ email: 1 });
 
 export default mongoose.model("Applicant", applicantSchema);

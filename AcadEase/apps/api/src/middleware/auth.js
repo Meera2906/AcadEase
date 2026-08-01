@@ -54,6 +54,15 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = verifyAccessToken(token);
+
+    // A pre-admission applicant token is not a staff or student credential.
+    // Refuse it here so no route can accidentally accept one by omission.
+    if (payload.typ === "applicant") {
+      return res.status(403).json({
+        error: "Applicant accounts can only access the admission portal",
+      });
+    }
+
     req.user = {
       ...payload,
       role: normalizeRole(payload.role),
@@ -64,6 +73,43 @@ export function requireAuth(req, res, next) {
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired access token" });
   }
+}
+
+// The mirror of requireAuth: only pre-admission applicant tokens pass, and the
+// applicant record is loaded so every handler is automatically scoped to the
+// one applicant that token belongs to.
+export function requireApplicantAuth(loadApplicant) {
+  return async (req, res, next) => {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ error: "Missing access token" });
+
+    let payload;
+    try {
+      payload = verifyAccessToken(token);
+    } catch {
+      return res.status(401).json({ error: "Invalid or expired access token" });
+    }
+
+    if (payload.typ !== "applicant") {
+      return res.status(403).json({ error: "This endpoint is for admission applicants only" });
+    }
+
+    try {
+      const applicant = await loadApplicant(payload.applicantId);
+      if (!applicant) return res.status(401).json({ error: "Applicant account no longer exists" });
+      if (applicant.studentUserId) {
+        return res.status(403).json({
+          error: "This application has been enrolled — sign in with your student account instead",
+        });
+      }
+      req.applicant = applicant;
+      req.applicantToken = payload;
+      return next();
+    } catch (err) {
+      return next(err);
+    }
+  };
 }
 
 export function requireRole(...roles) {

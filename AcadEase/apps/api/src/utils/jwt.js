@@ -32,6 +32,31 @@ export function signAccessToken(user) {
   });
 }
 
+// Pre-admission applicants are not Users and must never be able to reach a
+// staff or student route. Their tokens carry `typ: "applicant"`, which
+// requireAuth rejects outright — the separation is in the token itself, not in
+// a role string that some future route might forget to check.
+export function signApplicantToken(applicant) {
+  return jwt.sign(
+    {
+      typ: "applicant",
+      applicantId: applicant.applicantId,
+      userId: applicant.applicantId,
+      role: "applicant",
+      collegeId: applicant.collegeId,
+      program: applicant.program,
+    },
+    process.env.JWT_ACCESS_SECRET,
+    { expiresIn: process.env.JWT_ACCESS_EXPIRES_APPLICANT || "2h" }
+  );
+}
+
+export function signApplicantRefreshToken(applicant) {
+  return jwt.sign({ typ: "applicant_refresh", applicantId: applicant.applicantId }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRES || "7d",
+  });
+}
+
 export function signRefreshToken(user) {
   return jwt.sign({ userId: user.userId }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES || "7d",

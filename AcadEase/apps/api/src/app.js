@@ -16,6 +16,7 @@ import assessmentRoutes from "./routes/assessmentRoutes.js";
 import certificateRoutes from "./routes/certificateRoutes.js";
 import grievanceRoutes from "./routes/grievanceRoutes.js";
 import admissionRoutes from "./routes/admissionRoutes.js";
+import applicantRoutes from "./routes/applicantRoutes.js";
 import miscRoutes from "./routes/miscRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
@@ -40,6 +41,12 @@ app.use(
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 const csrfExemptPaths = new Set([
+  // Session bootstrap endpoints: no session exists yet, so there is no CSRF
+  // cookie to double-submit. Each one issues the token on success.
+  "/api/applicant/register",
+  "/api/applicant/login",
+  "/api/applicant/refresh",
+  "/api/applicant/logout",
   "/api/auth/login",
   "/api/auth/refresh",
   "/api/auth/verify-totp",
@@ -80,6 +87,7 @@ app.use("/api", assessmentRoutes); // exposes /api/assessments/*, /api/marks/*, 
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/grievances", grievanceRoutes);
 app.use("/api/admissions", admissionRoutes);
+app.use("/api/applicant", applicantRoutes);
 app.use("/api", miscRoutes); // exposes /api/notifications/*, /api/users/*, /api/admin/*, /api/gamification/*
 
 app.use(notFound);

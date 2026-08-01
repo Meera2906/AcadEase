@@ -25,6 +25,10 @@ import {
   sha256,
 } from "../utils/admissionRules.js";
 import { EXPECTED_FIELDS, expectedFieldsFor, extractDocumentFields } from "../utils/documentExtract.js";
+import { encryptDocument, decryptDocument, describeAccess, DecryptionDeniedError } from "../utils/documentCrypto.js";
+import { checkDocumentAuthenticity, QR_FLAG_LABELS } from "../utils/qrAuthenticity.js";
+import { inspectUpload } from "../utils/imageInspect.js";
+import { evaluateEligibility } from "../utils/eligibility.js";
 import { pushNotification } from "../utils/notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -339,19 +343,28 @@ function parseDocumentFileName(originalName = "") {
 
 async function persistDocument({ req, applicant, documentType, file, batchId }) {
   const buffer = file.buffer;
+  const mimeType = (file.mimetype || "").toLowerCase();
   const fileHash = sha256(buffer);
+
+  // Bulk-uploaded documents go through the same instant checks an applicant's
+  // own upload does, so a batch cannot be used to bypass them.
+  const quality = inspectUpload(buffer, mimeType);
+  if (!quality.ok) {
+    throw new Error(quality.hardFailures[0]);
+  }
+
+  const authenticity = await checkDocumentAuthenticity({ buffer, mimeType, applicant });
+  if (authenticity.fatal) {
+    throw new Error(authenticity.headline);
+  }
 
   const hashMatches = await DocumentSubmission.find({ fileHash })
     .select("applicantId collegeId documentType createdAt")
     .lean();
 
-  const { extractedFields, extractionSource } = await extractDocumentFields(
-    buffer,
-    (file.mimetype || "").toLowerCase(),
-    documentType
-  );
+  const { extractedFields, extractionSource } = await extractDocumentFields(buffer, mimeType, documentType);
 
-  const { flags, flagDetails } = computeFlags({
+  const { flags: ruleFlags, flagDetails } = computeFlags({
     applicant,
     extractedFields,
     extractionSource,
@@ -359,13 +372,20 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     expectedFields: expectedFieldsFor(documentType),
   });
 
+  const flags = [...new Set([...ruleFlags, ...(authenticity.flags || [])])];
+  (authenticity.flags || []).forEach((flag) => {
+    flagDetails[flag] = { status: authenticity.status, detail: authenticity.detail, link: authenticity.link };
+  });
+
+  // Encrypted at rest, wrapped for TNTEU and the owning university only.
+  const { ciphertext, encryption } = encryptDocument(buffer, { collegeId: applicant.collegeId });
+
   // Never reuse the client-supplied filename; it is kept only as a label.
-  const ext = path.extname(file.originalname || "").toLowerCase();
-  const storedName = `${crypto.randomUUID()}${ext}`;
+  const storedName = `${crypto.randomUUID()}.enc`;
   const collegeDir = path.join(SECURE_ROOT, applicant.collegeId.replace(/[^A-Za-z0-9_-]/g, "_"));
   if (!fs.existsSync(collegeDir)) fs.mkdirSync(collegeDir, { recursive: true });
   const absolutePath = path.join(collegeDir, storedName);
-  await fs.promises.writeFile(absolutePath, buffer);
+  await fs.promises.writeFile(absolutePath, ciphertext);
 
   const payload = {
     applicantId: applicant.applicantId,
@@ -374,12 +394,25 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     storedName,
     filePath: path.relative(SECURE_ROOT, absolutePath).split(path.sep).join("/"),
     originalName: path.basename(file.originalname || storedName).slice(0, 160),
-    mimeType: (file.mimetype || "").toLowerCase(),
+    mimeType,
     size: buffer.length,
     fileHash,
+    encryption,
     extractedFields,
     extractionSource,
     fieldsConfirmedBy: null,
+    qrCheck: {
+      status: authenticity.status,
+      headline: authenticity.headline,
+      detail: authenticity.detail,
+      link: authenticity.link || null,
+      issuerHost: authenticity.issuerHost || null,
+      certId: authenticity.certId || null,
+      payloads: authenticity.payloads || [],
+      checkedAt: new Date(),
+    },
+    qualityMetrics: quality.metrics,
+    qualityWarnings: quality.warnings,
     flags,
     flagDetails,
     flagCount: flags.length,
@@ -388,6 +421,7 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     verifiedAt: null,
     rejectionReason: null,
     uploadedBy: req.user.userId,
+    uploadedByRole: req.user.role,
     batchId,
   };
 
@@ -664,7 +698,8 @@ export async function getApplicant(req, res) {
 // GET /api/admissions/queue
 export async function getVerificationQueue(req, res) {
   const { page, limit, skip } = pagination(req);
-  const filter = scoped(req, { status: req.query.status || "pending" });
+  // `queued` keeps drafts out: an applicant still uploading is not review work.
+  const filter = scoped(req, { status: req.query.status || "pending", queued: true });
 
   if (req.query.documentType) filter.documentType = String(req.query.documentType);
   if (req.query.flagged === "true") filter.flagCount = { $gt: 0 };
@@ -739,6 +774,8 @@ export async function getDocument(req, res) {
       ...doc,
       label: DOCUMENT_LABELS[doc.documentType] || doc.documentType,
       expectedFields: expectedFieldsFor(doc.documentType),
+      // The wrapped-key list, in words — who can actually open this file.
+      readableBy: describeAccess(doc.encryption),
     },
     applicant,
     collegeName: college?.name || doc.collegeId,
@@ -746,13 +783,16 @@ export async function getDocument(req, res) {
     verifiedCount: derived.verifiedCount,
     requiredCount: derived.requiredCount,
     duplicateOf,
-    flagLabels: FLAG_LABELS,
+    eligibility: applicant ? evaluateEligibility(applicant) : null,
+    flagLabels: { ...FLAG_LABELS, ...QR_FLAG_LABELS },
   });
 }
 
 // GET /api/admissions/documents/:id/file
 export async function streamDocumentFile(req, res) {
-  const doc = await DocumentSubmission.findById(req.params.id).select("filePath mimeType collegeId originalName").lean();
+  const doc = await DocumentSubmission.findById(req.params.id)
+    .select("filePath mimeType collegeId originalName encryption")
+    .lean();
   if (!doc || !assertCanTouch(req, doc)) return res.status(404).json({ error: "Document not found" });
 
   // filePath is server-generated, but resolve-and-check anyway so a tampered
@@ -762,11 +802,30 @@ export async function streamDocumentFile(req, res) {
     return res.status(404).json({ error: "Stored file is missing" });
   }
 
+  const stored = await fs.promises.readFile(absolute);
+
+  // What is on disk is ciphertext. Decryption needs a data key wrapped for the
+  // caller's own institution — a role with no wrapped key gets nothing, and
+  // AES-GCM's auth tag means a tampered file throws rather than rendering.
+  let plaintext;
+  try {
+    plaintext = doc.encryption?.wrappedKeys
+      ? decryptDocument(stored, doc.encryption, { role: req.user.role, collegeId: ownCollegeId(req) })
+      : stored; // pre-encryption records from an earlier build
+  } catch (err) {
+    if (err instanceof DecryptionDeniedError) {
+      return res.status(403).json({ error: err.message });
+    }
+    return res.status(422).json({
+      error: "This document failed its integrity check and may have been altered on disk",
+    });
+  }
+
   res.setHeader("Content-Type", doc.mimeType || "application/octet-stream");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Content-Disposition", `inline; filename="document${path.extname(absolute)}"`);
+  res.setHeader("Content-Disposition", `inline; filename="document${path.extname(doc.originalName || "")}"`);
   res.setHeader("Cache-Control", "private, no-store");
-  fs.createReadStream(absolute).pipe(res);
+  res.send(plaintext);
 }
 
 // PATCH /api/admissions/documents/:id/verify
@@ -894,10 +953,10 @@ export async function getAdmissionStats(req, res) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [byStatus, perCollege, throughput, timing, applicantsByStatus, colleges] = await Promise.all([
-    DocumentSubmission.aggregate([{ $match: base }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+    DocumentSubmission.aggregate([{ $match: { ...base, queued: true } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
 
     DocumentSubmission.aggregate([
-      { $match: { ...base, status: "pending" } },
+      { $match: { ...base, status: "pending", queued: true } },
       { $group: { _id: "$collegeId", pending: { $sum: 1 }, flagged: { $sum: { $cond: [{ $gt: ["$flagCount", 0] }, 1, 0] } } } },
       { $sort: { pending: -1 } },
       { $limit: 20 },
@@ -1000,6 +1059,19 @@ export async function enrollApplicant(req, res) {
     });
   }
 
+  // Verified documents establish that the marks are real; eligibility decides
+  // whether those marks qualify for the programme. Both gates must pass before
+  // a student account exists.
+  const eligibility = evaluateEligibility(applicant);
+  if (!eligibility.eligible) {
+    return res.status(400).json({
+      error: `Applicant does not meet the ${eligibility.programLabel} eligibility criteria`,
+      blockers: eligibility.blockers,
+      missing: eligibility.missing,
+      eligibility,
+    });
+  }
+
   const email = applicant.email || `${applicant.applicantId.toLowerCase()}@applicant.tnteu.ac.in`;
   const clash = await User.findOne({ $or: [{ userId: applicant.applicantId }, { email }] }).lean();
   if (clash) {
@@ -1025,6 +1097,10 @@ export async function enrollApplicant(req, res) {
 
   applicant.studentUserId = student.userId;
   applicant.enrolledAt = new Date();
+  // Retires the temporary applicant login — from here they sign in as a student.
+  applicant.stage = "enrolled";
+  applicant.passwordHash = null;
+  applicant.refreshTokenHash = null;
   await applicant.save();
 
   await audit(req, "admission_applicant_enrolled", {
