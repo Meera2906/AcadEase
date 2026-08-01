@@ -25,7 +25,7 @@ const DOC_DIR = path.join(OUT_DIR, "documents");
 const HOST_COLLEGE = "TNTEU_COL_0417";
 const SECOND_COLLEGE = "TNTEU_COL_0912";
 
-function renderPdf(title, fields) {
+function renderPdf(title, fields, options = {}) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 56 });
     const chunks = [];
@@ -34,6 +34,10 @@ function renderPdf(title, fields) {
     doc.on("error", reject);
 
     doc.fontSize(16).text("GOVERNMENT OF TAMIL NADU", { align: "center" });
+    if (options.subtitle) {
+      doc.moveDown(0.2);
+      doc.fontSize(11).text(options.subtitle, { align: "center" });
+    }
     doc.moveDown(0.3);
     doc.fontSize(13).text(title.toUpperCase(), { align: "center" });
     doc.moveDown(1.5);
@@ -110,15 +114,24 @@ async function writeDocuments() {
     written.push(path.basename(file));
   };
 
+  // Headed like a real Directorate of Government Examinations marksheet, so the
+  // document-identity check has the same text to work with as it would in
+  // production. TN board marksheets carry no QR — that is the point.
   const marksheet = (name, level, register, year, extra = {}) =>
-    renderPdf(`${level} Standard Marksheet`, {
+    renderPdf(
+      level === "Tenth"
+        ? "Secondary School Leaving Certificate (SSLC) — Statement of Marks"
+        : "Higher Secondary Examination (HSC) — Statement of Marks",
+      {
       "Candidate Name": name,
       "Register Number": register,
       "Year of Passing": year,
       Board: "Tamil Nadu State Board",
       Percentage: extra.percentage ?? "82.40",
       ...extra.fields,
-    });
+      },
+      { subtitle: "DIRECTORATE OF GOVERNMENT EXAMINATIONS" }
+    );
 
   const ugDegree = (name, year) =>
     renderPdf("Bachelor Degree Certificate", {

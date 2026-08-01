@@ -233,7 +233,7 @@ async function seedAttendance(students, courses, collegeId) {
   console.log(`[seed] ~${records.length} attendance records (6 weeks)`);
 }
 
-async function seedOdRequests(students, courses) {
+async function seedOdRequests(students, courses, collegeId) {
   const cseStudents = students.filter((s) => s.departmentId === "CSE_2024");
   const reasonTypes = ["Placement Drive", "Medical", "Event", "Personal", "Other"];
   const statuses = ["approved", "approved", "approved", "pending", "pending", "rejected", "rejected", "rejected"];
@@ -242,6 +242,7 @@ async function seedOdRequests(students, courses) {
     const student = cseStudents[i % cseStudents.length];
     const course = courses[i % 4];
     return {
+      collegeId,
       studentId: student.userId,
       courseId: course.courseId,
       facultyId: course.facultyId,
@@ -258,16 +259,16 @@ async function seedOdRequests(students, courses) {
   console.log(`[seed] ${requests.length} OD requests`);
 }
 
-async function seedAssessmentsAndMarks(students, courses) {
+async function seedAssessmentsAndMarks(students, courses, collegeId) {
   const cseStudents = students.filter((s) => s.departmentId === "CSE_2024");
   const cseCourses = courses.filter((c) => c.departmentId === "CSE_2024");
 
   const assessmentDefs = [];
   for (const course of cseCourses) {
-    assessmentDefs.push({ courseId: course.courseId, type: "IA1", title: `${course.name} — IA1`, maxMarks: 100, createdBy: course.facultyId, marksPublished: true });
-    assessmentDefs.push({ courseId: course.courseId, type: "Assignment", title: `${course.name} — Assignment 1`, maxMarks: 50, createdBy: course.facultyId, marksPublished: true });
+    assessmentDefs.push({ collegeId, courseId: course.courseId, type: "IA1", title: `${course.name} — IA1`, maxMarks: 100, createdBy: course.facultyId, marksPublished: true });
+    assessmentDefs.push({ collegeId, courseId: course.courseId, type: "Assignment", title: `${course.name} — Assignment 1`, maxMarks: 50, createdBy: course.facultyId, marksPublished: true });
   }
-  assessmentDefs.push({ courseId: "CS301", type: "IA2", title: "Database Management Systems — IA2", maxMarks: 100, createdBy: "FAC_CSE_001", marksPublished: true });
+  assessmentDefs.push({ collegeId, courseId: "CS301", type: "IA2", title: "Database Management Systems — IA2", maxMarks: 100, createdBy: "FAC_CSE_001", marksPublished: true });
 
   const assessments = await Assessment.insertMany(assessmentDefs);
   console.log(`[seed] ${assessments.length} assessments`);
@@ -284,6 +285,7 @@ async function seedAssessmentsAndMarks(students, courses) {
         score = Math.round(assessment.maxMarks * base);
       }
       marks.push({
+        collegeId,
         assessmentId: assessment._id,
         courseId: assessment.courseId,
         studentId: student.userId,
@@ -365,6 +367,7 @@ async function seedGrievances(students, collegeId) {
       satisfactionRating: 4,
     },
     {
+      collegeId,
       studentId: s2.userId,
       departmentId: s2.departmentId,
       category: "Administrative",
@@ -374,6 +377,7 @@ async function seedGrievances(students, collegeId) {
       handledBy: "ADM_CSE_001",
     },
     {
+      collegeId,
       studentId: s3.userId,
       departmentId: s3.departmentId,
       category: "Infrastructure",
@@ -385,7 +389,7 @@ async function seedGrievances(students, collegeId) {
   console.log("[seed] 3 grievances");
 }
 
-async function seedSemesterResults(students) {
+async function seedSemesterResults(students, collegeId) {
   const cseStudents = students.filter((s) => s.departmentId === "CSE_2024");
   const courses = [
     { courseId: "CS301", courseName: "Database Management Systems" },
@@ -421,6 +425,7 @@ async function seedSemesterResults(students) {
       };
     });
     return {
+      collegeId,
       studentId: student.userId,
       semester: 4, // previous semester results
       academicYear: "2023-2024",
@@ -534,9 +539,9 @@ async function main() {
   const courses = await seedCourses(college.collegeId);
   await seedEnrollments(students, courses, college.collegeId);
   await seedAttendance(students, courses, college.collegeId);
-  await seedOdRequests(students, courses);
-  await seedAssessmentsAndMarks(students, courses);
-  await seedSemesterResults(students);
+  await seedOdRequests(students, courses, college.collegeId);
+  await seedAssessmentsAndMarks(students, courses, college.collegeId);
+  await seedSemesterResults(students, college.collegeId);
   await seedCertificates(students, college.collegeId);
   await seedGrievances(students, college.collegeId);
   await seedNotificationsAndXp(students);

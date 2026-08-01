@@ -12,6 +12,7 @@ import {
   deriveApplicantStatus,
   isKnownDocumentType,
   requiredDocumentsFor,
+  namesMatch,
   sha256,
 } from "../utils/admissionRules.js";
 import { expectedFieldsFor, extractDocumentFields } from "../utils/documentExtract.js";
@@ -19,6 +20,18 @@ import { inspectUpload, SIZE_LIMITS, IMAGE_LIMITS } from "../utils/imageInspect.
 import { checkDocumentAuthenticity, QR_FLAG_LABELS } from "../utils/qrAuthenticity.js";
 import { encryptDocument } from "../utils/documentCrypto.js";
 import { ELIGIBILITY_RULES, evaluateEligibility, qualifyingMinimumFor } from "../utils/eligibility.js";
+import { checkClaimedType, verificationGuidanceFor } from "../utils/tnDocuments.js";
+import { extractPdfText } from "../utils/pdfText.js";
+
+// The type check works off the same text the pre-fill uses; a file we cannot
+// read simply yields "unconfirmed" rather than blowing up the upload.
+function safePdfText(buffer) {
+  try {
+    return extractPdfText(buffer) || "";
+  } catch {
+    return "";
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SECURE_ROOT = path.resolve(__dirname, "../../secure-storage/admission-docs");
@@ -57,6 +70,39 @@ async function audit(actorId, action, metadata, collegeId) {
   } catch {
     // best effort
   }
+}
+
+// Name and date of birth must agree across an applicant's own documents. This
+// is a plain string comparison across records we already hold — it catches a
+// borrowed or substituted certificate that every per-file check would pass.
+async function crossDocumentFlags(applicant, documentType, extractedFields) {
+  const flags = [];
+  const details = {};
+  if (!extractedFields.name && !extractedFields.dob) return { flags, details };
+
+  const siblings = await DocumentSubmission.find({
+    applicantId: applicant.applicantId,
+    documentType: { $ne: documentType },
+  })
+    .select("documentType extractedFields")
+    .lean();
+
+  const conflicts = [];
+  for (const sibling of siblings) {
+    const other = sibling.extractedFields || {};
+    if (extractedFields.name && other.name && !namesMatch(extractedFields.name, other.name)) {
+      conflicts.push({ field: "name", against: sibling.documentType, here: extractedFields.name, there: other.name });
+    }
+    if (extractedFields.dob && other.dob && extractedFields.dob !== other.dob) {
+      conflicts.push({ field: "dob", against: sibling.documentType, here: extractedFields.dob, there: other.dob });
+    }
+  }
+
+  if (conflicts.length) {
+    flags.push("cross_document_mismatch");
+    details.cross_document_mismatch = { conflicts };
+  }
+  return { flags, details };
 }
 
 function publicApplicant(applicant) {
@@ -290,7 +336,7 @@ export async function logoutApplicant(req, res) {
 
 async function buildApplicationView(applicant) {
   const documents = await DocumentSubmission.find({ applicantId: applicant.applicantId })
-    .select("documentType status flags flagCount rejectionReason qrCheck qualityWarnings originalName size mimeType createdAt verifiedAt extractedFields")
+    .select("documentType status flags flagCount rejectionReason qrCheck qualityWarnings qualityMetrics typeCheck verificationGuidance originalName size mimeType createdAt verifiedAt extractedFields")
     .sort({ createdAt: 1 })
     .lean();
 
@@ -407,7 +453,7 @@ export async function uploadMyDocument(req, res) {
   }
 
   // ── 2. Authenticity, as far as it can honestly be established.
-  const authenticity = await checkDocumentAuthenticity({ buffer, mimeType, applicant });
+  const authenticity = await checkDocumentAuthenticity({ buffer, mimeType, applicant, documentType });
   if (authenticity.fatal) {
     await audit(
       applicant.applicantId,
@@ -436,7 +482,35 @@ export async function uploadMyDocument(req, res) {
     });
   }
 
-  // ── 4. Duplicate detection across the entire system, on the plaintext hash.
+  // ── 4. Is this actually the document it was filed as? For a TN marksheet
+  //       there is no QR to lean on, so this keyword check is the only thing
+  //       standing between the queue and somebody attaching their degree
+  //       certificate to the 10th-marksheet slot. Only refused when the file
+  //       positively reads as a *different* known type — an unrecognisable
+  //       scan is flagged for a human, never rejected.
+  const documentText = mimeType === "application/pdf" ? safePdfText(buffer) : "";
+  const typeCheck = checkClaimedType(documentType, documentText, { extractionSource });
+
+  if (typeCheck.verdict === "mismatch") {
+    await audit(
+      applicant.applicantId,
+      "applicant_document_refused",
+      { documentType, reason: "wrong_document_type", detectedType: typeCheck.detectedType },
+      applicant.collegeId
+    );
+    return res.status(422).json({
+      error: `This does not look like your ${DOCUMENT_LABELS[documentType]}`,
+      stage: "document_type",
+      problems: [
+        typeCheck.detail,
+        "Check you picked the right file, then upload it under the correct heading.",
+      ],
+      detectedType: typeCheck.detectedType,
+      suggestedType: typeCheck.detectedType,
+    });
+  }
+
+  // ── 5. Duplicate detection across the entire system, on the plaintext hash.
   const fileHash = sha256(buffer);
   const hashMatches = await DocumentSubmission.find({ fileHash })
     .select("applicantId collegeId documentType createdAt")
@@ -458,7 +532,7 @@ export async function uploadMyDocument(req, res) {
     });
   }
 
-  // ── 5. The standing rule-based flags, over the assistive pre-fill.
+  // ── 6. The standing rule-based flags, over the assistive pre-fill.
   const { flags, flagDetails } = computeFlags({
     applicant,
     extractedFields,
@@ -467,15 +541,21 @@ export async function uploadMyDocument(req, res) {
     expectedFields: expectedFieldsFor(documentType),
   });
 
-  const allFlags = [...new Set([...flags, ...(authenticity.flags || [])])];
-  const flagDetailsWithQr = { ...flagDetails };
+  // An unconfirmed type is a flag, not a refusal — it puts the document in
+  // front of a human sooner without punishing a genuine scanned certificate.
+  const typeFlags = typeCheck.verdict === "unconfirmed" ? ["type_unconfirmed"] : [];
+  const crossDocFlags = await crossDocumentFlags(applicant, documentType, extractedFields);
+
+  const allFlags = [...new Set([...flags, ...(authenticity.flags || []), ...typeFlags, ...crossDocFlags.flags])];
+  const flagDetailsWithQr = { ...flagDetails, ...crossDocFlags.details };
+  if (typeFlags.length) flagDetailsWithQr.type_unconfirmed = { detail: typeCheck.detail, detectedType: typeCheck.detectedType };
   if (authenticity.flags?.length) {
     authenticity.flags.forEach((flag) => {
       flagDetailsWithQr[flag] = { status: authenticity.status, detail: authenticity.detail, link: authenticity.link };
     });
   }
 
-  // ── 6. Encrypt, then write. Plaintext never reaches the disk.
+  // ── 7. Encrypt, then write. Plaintext never reaches the disk.
   const { ciphertext, encryption } = encryptDocument(buffer, { collegeId: applicant.collegeId });
 
   const storedName = `${crypto.randomUUID()}.enc`;
@@ -507,6 +587,9 @@ export async function uploadMyDocument(req, res) {
       payloads: authenticity.payloads || [],
       checkedAt: new Date(),
     },
+    typeCheck: { verdict: typeCheck.verdict, detectedType: typeCheck.detectedType, detail: typeCheck.detail },
+    // Where the QR check cannot help, this is what replaces it.
+    verificationGuidance: verificationGuidanceFor(documentType, extractedFields),
     qualityMetrics: quality.metrics,
     qualityWarnings: quality.warnings,
     flags: allFlags,
@@ -551,6 +634,8 @@ export async function uploadMyDocument(req, res) {
       issuerHost: authenticity.issuerHost || null,
     },
     quality: { metrics: quality.metrics, warnings: quality.warnings },
+    typeCheck,
+    verificationGuidance: verificationGuidanceFor(documentType, extractedFields),
     extractedFields,
     extractionSource,
     flags: allFlags,

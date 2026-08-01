@@ -160,7 +160,7 @@ async function main() {
     JSON.stringify(ro.body).slice(0, 160));
 
   // Government issuer QR: accepted, but explicitly NOT called verified.
-  const govt = await makePdf(["Candidate Name: Kavya Rangan", "Register Number: 2024500001", "Year of Passing: 2020"],
+  const govt = await makePdf(["HIGHER SECONDARY EXAMINATION (HSC) - STATEMENT OF MARKS", "Candidate Name: Kavya Rangan", "Register Number: 2024500001", "Year of Passing: 2020"],
     "https://dge.tn.gov.in/verify?no=2024500001");
   const rg = await upload(token, "12th_marksheet", govt, "twelfth.pdf", "application/pdf");
   check("an issuer QR is accepted", rg.status === 201, JSON.stringify(rg.body).slice(0, 140));
@@ -170,13 +170,73 @@ async function main() {
   // flag the whole queue and make flagged-first ordering meaningless.
   check("an issuer QR does not raise a flag", rg.body.flags.length === 0, JSON.stringify(rg.body.flags));
 
+  // ── 4b. The wrong file in the wrong slot ─────────────────────────────────
+  // TN 10th/12th marksheets carry no QR, so the QR check contributes nothing
+  // for them. Without a document-identity check, any PDF at all would sail
+  // through under any heading. This is what closes that hole.
+  console.log("\n4b. The document must actually be the type it was filed under");
+
+  const realUg = await makePdf([
+    "BHARATHIAR UNIVERSITY", "BACHELOR DEGREE CERTIFICATE",
+    "Degree: Bachelor of Science", "Candidate Name: Kavya Rangan",
+  ]);
+  const wrongSlot = await upload(token, "10th_marksheet", realUg, "wrong.pdf", "application/pdf");
+  check("a degree certificate filed as a 10th marksheet is refused",
+    wrongSlot.status === 422 && wrongSlot.body.stage === "document_type",
+    JSON.stringify(wrongSlot.body).slice(0, 160));
+  check("the applicant is told which document it actually looks like",
+    wrongSlot.body.detectedType === "ug_degree", JSON.stringify(wrongSlot.body.detectedType));
+
+  const realSslc = await makePdf([
+    "DIRECTORATE OF GOVERNMENT EXAMINATIONS",
+    "SECONDARY SCHOOL LEAVING CERTIFICATE (SSLC) - STATEMENT OF MARKS",
+    "Candidate Name: Kavya Rangan", "Register Number: 1024500001", "Year of Passing: 2018",
+  ]);
+  const tenthAsTwelfth = await upload(token, "12th_marksheet", realSslc, "sslc.pdf", "application/pdf");
+  check("a 10th marksheet filed as a 12th marksheet is refused", tenthAsTwelfth.status === 422,
+    JSON.stringify(tenthAsTwelfth.body).slice(0, 160));
+
+  // A genuine scan we cannot read must NEVER be refused on type.
+  const scanNoText = blankPng(1700, 2400);
+  const unreadableScan = await upload(token, "transfer_certificate", scanNoText, "tc.png", "image/png");
+  check("a genuine scan with no text layer is accepted, not refused on type",
+    unreadableScan.status === 201, JSON.stringify(unreadableScan.body).slice(0, 160));
+  check("it is flagged for a human instead",
+    unreadableScan.body.flags.includes("type_unconfirmed"), JSON.stringify(unreadableScan.body.flags));
+
+  // ── 4c. No QR is not reassurance ─────────────────────────────────────────
+  console.log("\n4c. A missing QR hands off to the manual route");
+  const sslcOk = await upload(token, "10th_marksheet", realSslc, "sslc.pdf", "application/pdf");
+  check("the SSLC is accepted", sslcOk.status === 201, JSON.stringify(sslcOk.body).slice(0, 140));
+  check("no QR is found on it", sslcOk.body.qrCheck.status === "absent");
+  check("it does NOT say a missing QR is normal/fine",
+    !/that is normal|traditional way/i.test(sslcOk.body.qrCheck.detail), sslcOk.body.qrCheck.detail);
+  check("it says the QR check does not apply to this document type",
+    /does not apply/i.test(sslcOk.body.qrCheck.headline), sslcOk.body.qrCheck.headline);
+  check("the manual route names the issuing authority",
+    /Directorate of Government Examinations/.test(sslcOk.body.verificationGuidance?.issuer || ""));
+  check("the manual route links the DGE portal",
+    sslcOk.body.verificationGuidance?.portal === "https://dge.tn.gov.in");
+  check("the register number is extracted for the reviewer's lookup",
+    sslcOk.body.verificationGuidance?.lookupValues?.registerNumber === "1024500001",
+    JSON.stringify(sslcOk.body.verificationGuidance?.lookupValues));
+  check("the reviewer is given concrete steps",
+    (sslcOk.body.verificationGuidance?.steps || []).length >= 3);
+
   // ── 5. clean uploads ──────────────────────────────────────────────────────
   console.log("\n5. The remaining documents upload cleanly");
   const clean = {
-    "10th_marksheet": ["Candidate Name: Kavya Rangan", "Register Number: 1024500001", "Year of Passing: 2018"],
-    ug_degree: ["Candidate Name: Kavya Rangan", "University: Bharathiar University", "Year of Passing: 2023"],
-    transfer_certificate: ["Candidate Name: Kavya Rangan", "Date of Issue: 12-06-2023"],
-    id_proof: ["Candidate Name: Kavya Rangan", "Aadhaar Number: 5561 2093 8834"],
+    "10th_marksheet": [
+      "DIRECTORATE OF GOVERNMENT EXAMINATIONS",
+      "SECONDARY SCHOOL LEAVING CERTIFICATE (SSLC) - STATEMENT OF MARKS",
+      "Candidate Name: Kavya Rangan", "Register Number: 1024500001", "Year of Passing: 2018",
+    ],
+    ug_degree: [
+      "BACHELOR DEGREE CERTIFICATE", "Degree: Bachelor of Science",
+      "Candidate Name: Kavya Rangan", "University: Bharathiar University", "Year of Passing: 2023",
+    ],
+    transfer_certificate: ["TRANSFER CERTIFICATE", "Candidate Name: Kavya Rangan", "Date of Issue: 12-06-2023"],
+    id_proof: ["UNIQUE IDENTIFICATION AUTHORITY OF INDIA", "Candidate Name: Kavya Rangan", "Aadhaar Number: 5561 2093 8834"],
   };
   // pdfkit stamps a creation date, so two generations of the "same" document
   // differ byte for byte. Keep the exact buffer to test duplicate detection.

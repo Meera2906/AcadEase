@@ -19,7 +19,10 @@ const QR_PRESENTATION = {
   verified_source: { icon: ShieldCheck, tone: "success", title: "Authenticity confirmed" },
   issuer_reference: { icon: ScanLine, tone: "info", title: "Issuer QR found" },
   unrecognised_qr: { icon: ScanLine, tone: "warn", title: "Unrecognised QR" },
-  absent: { icon: Info, tone: "muted", title: "No QR code" },
+  // Deliberately neutral, not reassuring: for a TN marksheet the QR check
+  // simply does not apply, and the applicant should not read "no QR" as
+  // "cleared". The real check happens at TNTEU against the register number.
+  absent: { icon: Info, tone: "muted", title: "Checked by register number" },
 };
 
 const TONES = {
@@ -49,6 +52,31 @@ function QrBadge({ qrCheck }) {
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+// Where a QR cannot help, this is what the reviewer will actually do — shown
+// to the applicant too, so they know their document is not simply waved
+// through and can make sure the register number is legible.
+function ManualCheckNote({ guidance }) {
+  if (!guidance) return null;
+  return (
+    <div className="p-2.5 rounded-card border border-border bg-paper">
+      <p className="text-[11px] font-bold text-text-secondary">How TNTEU will verify this</p>
+      <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
+        Against {guidance.issuer}
+        {guidance.portalLabel ? ` via ${guidance.portalLabel}` : ""}
+        {guidance.lookupReady
+          ? ` — using ${Object.entries(guidance.lookupValues).map(([k, v]) => `${k === "registerNumber" ? "register number" : k} ${v}`).join(", ")}.`
+          : "."}
+      </p>
+      {!guidance.lookupReady && guidance.lookupBy?.length > 0 && (
+        <p className="text-[11px] text-warning mt-1">
+          We could not read the {guidance.lookupBy[0] === "registerNumber" ? "register number" : guidance.lookupBy[0]} from
+          this scan. A clearer scan will speed your verification up.
+        </p>
+      )}
     </div>
   );
 }
@@ -114,6 +142,14 @@ function DocumentRow({ item, doc, onUpload, onRemove, busy, disabled }) {
       {uploaded && (
         <div className="mt-3 space-y-2 pl-7">
           <QrBadge qrCheck={doc.qrCheck} />
+          {doc.qrCheck?.status === "absent" && <ManualCheckNote guidance={doc.verificationGuidance} />}
+
+          {doc.typeCheck?.verdict === "unconfirmed" && (
+            <div className={`flex items-start gap-2 p-2.5 rounded-card border ${TONES.warn}`}>
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <p className="text-[11px]">{doc.typeCheck.detail}</p>
+            </div>
+          )}
 
           {doc.qualityWarnings?.map((warning) => (
             <div key={warning} className={`flex items-start gap-2 p-2.5 rounded-card border ${TONES.warn}`}>

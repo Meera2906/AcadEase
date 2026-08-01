@@ -43,6 +43,8 @@ export const FLAG_LABELS = {
   future_date: "Document carries a date in the future",
   expired_document: "Document validity date has passed",
   unreadable: "No machine-readable text — reviewer must read the file directly",
+  type_unconfirmed: "Could not confirm this is the document type it was filed under",
+  cross_document_mismatch: "Details disagree with another document from the same applicant",
 };
 
 export function sha256(buffer) {

@@ -29,6 +29,8 @@ import { encryptDocument, decryptDocument, describeAccess, DecryptionDeniedError
 import { checkDocumentAuthenticity, QR_FLAG_LABELS } from "../utils/qrAuthenticity.js";
 import { inspectUpload } from "../utils/imageInspect.js";
 import { evaluateEligibility } from "../utils/eligibility.js";
+import { checkClaimedType, verificationGuidanceFor } from "../utils/tnDocuments.js";
+import { extractPdfText } from "../utils/pdfText.js";
 import { pushNotification } from "../utils/notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -394,9 +396,16 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     throw new Error(quality.hardFailures[0]);
   }
 
-  const authenticity = await checkDocumentAuthenticity({ buffer, mimeType, applicant });
+  const authenticity = await checkDocumentAuthenticity({ buffer, mimeType, applicant, documentType });
   if (authenticity.fatal) {
     throw new Error(authenticity.headline);
+  }
+
+  // Same document-identity check the applicant portal runs. In a bulk upload
+  // this is the check that catches a mis-named file in a folder of forty.
+  let documentText = "";
+  if (mimeType === "application/pdf") {
+    try { documentText = extractPdfText(buffer) || ""; } catch { documentText = ""; }
   }
 
   const hashMatches = await DocumentSubmission.find({ fileHash })
@@ -404,6 +413,11 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     .lean();
 
   const { extractedFields, extractionSource } = await extractDocumentFields(buffer, mimeType, documentType);
+
+  const typeCheck = checkClaimedType(documentType, documentText, { extractionSource });
+  if (typeCheck.verdict === "mismatch") {
+    throw new Error(typeCheck.detail);
+  }
 
   const { flags: ruleFlags, flagDetails } = computeFlags({
     applicant,
@@ -413,7 +427,14 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
     expectedFields: expectedFieldsFor(documentType),
   });
 
-  const flags = [...new Set([...ruleFlags, ...(authenticity.flags || [])])];
+  const flags = [...new Set([
+    ...ruleFlags,
+    ...(authenticity.flags || []),
+    ...(typeCheck.verdict === "unconfirmed" ? ["type_unconfirmed"] : []),
+  ])];
+  if (typeCheck.verdict === "unconfirmed") {
+    flagDetails.type_unconfirmed = { detail: typeCheck.detail, detectedType: typeCheck.detectedType };
+  }
   (authenticity.flags || []).forEach((flag) => {
     flagDetails[flag] = { status: authenticity.status, detail: authenticity.detail, link: authenticity.link };
   });
@@ -452,6 +473,8 @@ async function persistDocument({ req, applicant, documentType, file, batchId }) 
       payloads: authenticity.payloads || [],
       checkedAt: new Date(),
     },
+    typeCheck: { verdict: typeCheck.verdict, detectedType: typeCheck.detectedType, detail: typeCheck.detail },
+    verificationGuidance: verificationGuidanceFor(documentType, extractedFields),
     qualityMetrics: quality.metrics,
     qualityWarnings: quality.warnings,
     flags,

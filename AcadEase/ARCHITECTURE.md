@@ -40,6 +40,7 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
 | QR authenticity resolution | `utils/qrAuthenticity.js`, `utils/qrScan.js` | ✅ decodes QR from images *and* from image XObjects inside PDFs |
 | Legibility / clarity gate (dimensions, DPI, JPEG quantisation, blank pages) | `utils/imageInspect.js` | ✅ |
 | Course eligibility rules (B.Ed / M.Ed, reserved-category rates) | `utils/eligibility.js` | ✅ |
+| **Document identity + manual-verification guidance** (TN board keyword signatures, per-issuer portals) | `utils/tnDocuments.js` | ✅ unit-tested in `test/tnDocuments.test.js` |
 | **Admission verification** (bulk import → hash + rule flags → TNTEU queue → verify/reject → enrol) | `routes/admissionRoutes.js`, `controllers/admissionController.js` | ✅ — **this is now the demo centrepiece** |
 | Admission rules (required-document checklist, deterministic flags, derived applicant status) | `utils/admissionRules.js` | ✅ unit-tested in `test/admissionRules.test.js` |
 | Assistive field pre-fill from document text | `utils/documentExtract.js`, `utils/pdfText.js` | ✅ — pattern-matching only, never a decision |
@@ -90,6 +91,28 @@ maps directly to the priority tiers in `AcadEase_PRD.docx` Section 4.
   floor, which wrongly refused born-digital PDFs (DigiLocker downloads are
   routinely under 50 KB and perfectly readable). PDFs are instead checked for
   actually carrying content — a text layer or an embedded image.
+
+### The QR gap for TN documents
+
+- **TN SSLC/HSC marksheets, degree certificates and TCs carry no QR.** For those
+  the QR check contributes nothing, so `QR_NEVER_EXPECTED` switches the copy
+  from "no QR found" to "QR verification does not apply to this document" and
+  routes the reviewer to the issuer instead. The previous wording ("that is
+  normal for older certificates") actively encouraged the reviewer to relax.
+- **`checkClaimedType` is what stops any-PDF-under-any-heading.** Weighted
+  keyword signatures with a `decisive` flag: shared boilerplate ("Statement of
+  Marks", "Directorate of Government Examinations") appears on both SSLC and HSC
+  sheets and must never on its own satisfy either type, or the wrong-slot check
+  would pass everything.
+- **Only refuse on positive evidence of a different type.** Unreadable scans and
+  images are flagged `type_unconfirmed`, never rejected — a false rejection
+  costs a real applicant their admission.
+- **`verificationGuidance` is computed at upload and stored**, so the reviewer
+  gets the issuer, the portal, the extracted register number and the comparison
+  checklist without re-reading the scan.
+- **Cross-document consistency** compares name and DOB across the applicant's
+  own documents; a substituted certificate passes every per-file check and fails
+  this one.
 
 ### Counter-signature chains
 

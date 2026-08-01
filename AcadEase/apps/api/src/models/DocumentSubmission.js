@@ -44,6 +44,18 @@ const documentSubmissionSchema = new mongoose.Schema(
       payloads: [{ type: String }],
       checkedAt: { type: Date, default: null },
     },
+    // Did this file read as the document type it was filed under? Keyword
+    // identification only — see utils/tnDocuments.js.
+    typeCheck: {
+      verdict: { type: String, default: null }, // match | mismatch | unconfirmed
+      detectedType: { type: String, default: null },
+      detail: { type: String, default: null },
+    },
+
+    // Where there is no QR, this is the manual route: issuer, portal, the
+    // extracted lookup handle, and the exact fields to compare.
+    verificationGuidance: { type: mongoose.Schema.Types.Mixed, default: null },
+
     qualityMetrics: { type: mongoose.Schema.Types.Mixed, default: {} },
     qualityWarnings: [{ type: String }],
     uploadedByRole: { type: String, default: null },

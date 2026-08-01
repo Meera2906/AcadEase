@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, XCircle, Clock, CircleDashed,
-  FileWarning, Download, Info, ShieldCheck, ScanLine, ExternalLink, Lock,
+  FileWarning, Download, Info, ShieldCheck, ScanLine, ExternalLink, Lock, BookOpenCheck,
 } from "lucide-react";
 import api from "../../api/client.js";
 import AppShell from "../../components/layout/AppShell.jsx";
@@ -182,7 +182,10 @@ export default function VerificationReview() {
     verified_source: { tone: "bg-[#E9FCE0] border-[#b6f0cc] text-success", icon: ShieldCheck, title: "Authenticity confirmed" },
     issuer_reference: { tone: "bg-[#E8ECFF] border-[#c3ccff] text-signal", icon: ScanLine, title: "Issuer verification link" },
     unrecognised_qr: { tone: "bg-[#FFF3DC] border-[#f5dfae] text-[#8a6300]", icon: ScanLine, title: "Unrecognised QR code" },
-    absent: { tone: "bg-paper border-border text-text-secondary", icon: Info, title: "No QR code" },
+    // Title comes from the server for this one: for a TN marksheet it reads
+    // "QR verification does not apply to this document", which is the honest
+    // framing. "No QR code" alone invites the reviewer to treat it as cleared.
+    absent: { tone: "bg-paper border-border text-text-secondary", icon: Info, title: qr.headline || "No QR code" },
   };
   const qrView = QR_VIEW[qr.status] || QR_VIEW.absent;
   const QrIcon = qrView.icon;
@@ -282,6 +285,84 @@ export default function VerificationReview() {
                 {qr.status === "unrecognised_qr" && qr.payloads?.length > 0 && (
                   <p className="text-[11px] font-mono mt-1 break-all opacity-80">{qr.payloads[0]}</p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Where the QR check cannot contribute — TN board marksheets, degree
+              certificates — this replaces it with the actual manual route, with
+              the lookup handle already extracted. This is the labour reduction
+              for these document types: not skipping the check, but removing
+              every step of it except the comparison. */}
+          {doc.verificationGuidance && qr.status === "absent" && (
+            <div className="p-3 rounded-card border border-border bg-paper">
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpenCheck size={14} className="text-text-secondary" />
+                <p className="text-xs font-bold text-text-primary">How to verify this</p>
+              </div>
+
+              <p className="text-[11px] text-text-secondary leading-relaxed mb-2">
+                {doc.verificationGuidance.note}
+              </p>
+
+              {doc.verificationGuidance.lookupReady && (
+                <div className="mb-2 p-2 rounded-card bg-white border border-border">
+                  {Object.entries(doc.verificationGuidance.lookupValues).map(([field, value]) => (
+                    <div key={field} className="flex items-center justify-between gap-2 py-0.5">
+                      <span className="text-[11px] text-text-muted capitalize">
+                        {field.replace(/([A-Z])/g, " $1").toLowerCase()}
+                      </span>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(String(value))}
+                        title="Copy"
+                        className="text-[11px] font-mono font-semibold text-text-primary hover:text-signal"
+                      >
+                        {value}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <ol className="space-y-1 mb-2">
+                {doc.verificationGuidance.steps.map((step, index) => (
+                  <li key={index} className="text-[11px] text-text-secondary flex gap-1.5">
+                    <span className="text-text-muted font-mono shrink-0">{index + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+
+              {doc.verificationGuidance.portal && (
+                <a
+                  href={doc.verificationGuidance.portal}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] font-semibold text-signal underline inline-flex items-center gap-1"
+                >
+                  Open {doc.verificationGuidance.portalLabel} <ExternalLink size={10} />
+                </a>
+              )}
+              {doc.verificationGuidance.altPortal && (
+                <a
+                  href={doc.verificationGuidance.altPortal}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-text-muted underline ml-3"
+                >
+                  alternate portal
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Did this file read as the type it was filed under? */}
+          {doc.typeCheck?.verdict && doc.typeCheck.verdict !== "match" && (
+            <div className="flex items-start gap-2.5 p-3 rounded-card border bg-[#FFF3DC] border-[#f5dfae]">
+              <FileWarning size={15} className="mt-0.5 shrink-0 text-warning" />
+              <div>
+                <p className="text-xs font-bold text-warning">Document type not confirmed</p>
+                <p className="text-xs text-[#8a6300] mt-0.5 leading-relaxed">{doc.typeCheck.detail}</p>
               </div>
             </div>
           )}

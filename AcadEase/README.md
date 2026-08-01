@@ -60,7 +60,7 @@ Anyone can verify the whole chain by scanning the QR code, with no login.
 | Who initiates | Applicant / college | College | Student |
 | Who decides | TNTEU reviewer | TNTEU | College, then TNTEU |
 | What we removed | Manual cross-checking | Letters and phone calls | "Is this real?" |
-| Proof it works | 49 + 59 e2e assertions | 21 e2e assertions | 39 e2e assertions |
+| Proof it works | 49 + 72 e2e assertions | 21 e2e assertions | 39 e2e assertions |
 
 ---
 
@@ -138,6 +138,47 @@ There are two ways an application reaches TNTEU. Both land in the same queue.
    in on the main login page and download their digitally signed certificates
    from their own device whenever they need them.
 
+### The QR gap — and what actually covers it
+
+**Tamil Nadu SSLC and HSC marksheets carry no QR code at all.** Neither do
+degree certificates or transfer certificates. Those are the bulk of every
+admission file, so for most documents the QR check is silent by construction.
+
+An earlier version reported that as *"no QR — that is normal for older
+certificates"*. That was worse than saying nothing: it reassured the reviewer at
+exactly the moment the check had given them nothing, and any PDF at all was
+accepted under any heading. Two deterministic checks now cover that gap.
+
+**1. Is it the document it was filed as?** TN board documents carry very stable
+printed text, so a marksheet can be told from a degree certificate by weighted
+keyword, with no model involved. The severity ladder is deliberately cautious,
+because a false rejection costs a real applicant their admission:
+
+| Situation | Outcome |
+| --- | --- |
+| Decisive marker for the claimed type, nothing outranking it | **accepted** |
+| No decisive marker for the claimed type, decisive marker for a *different* one | **refused** — "this reads as a UG Degree Certificate, not a 10th Marksheet" |
+| Only shared boilerplate matched (`Statement of Marks`, `Directorate of…`) | flagged `type_unconfirmed` |
+| Image, or a scan with no text layer, or nothing recognisable | flagged `type_unconfirmed`, **never refused** |
+
+That last row matters: a genuine scanned certificate is never rejected for being
+unreadable. It is put in front of a human sooner instead.
+
+**2. What the reviewer should do instead.** Where there is no QR there is still
+an issuer and a portal. Rather than a dead end, the review screen shows the
+issuing authority, a link to its verification page, **the register number
+already extracted and one click to copy**, and the specific fields to compare —
+for SSLC/HSC that is `dge.tn.gov.in` with the register number and year of
+passing. That is the labour reduction for these document types: not skipping the
+manual check, but removing every step of it except the comparison itself.
+
+The applicant sees the same thing on upload, so if the register number could not
+be read they know to rescan before it reaches a queue.
+
+**3. Cross-document consistency.** Name and date of birth must agree across an
+applicant's own documents. A borrowed or substituted certificate passes every
+per-file check and fails this one.
+
 ### What a QR code can and cannot prove
 
 This is the part most easily overclaimed, so it is worth being precise.
@@ -152,9 +193,11 @@ This is the part most easily overclaimed, so it is worth being precise.
   "verified", because we did not verify it. Silently upgrading a link into a
   green tick would be exactly the hallucination risk this design avoids, just
   wearing a security badge.
-- **No QR is not a red flag.** Most Indian certificates in circulation predate
-  QR codes. Flagging their absence would flag nearly every document and make the
-  flagged-first queue ordering meaningless.
+- **No QR is not a red flag, but it is not a clean bill of health either.** Most
+  Indian certificates predate QR codes, so flagging their absence would flag
+  nearly every document and make the queue ordering meaningless. Instead the
+  reviewer is told plainly that the check *does not apply to this document type*
+  and handed the manual route above.
 
 ### Counter-signatures: why not the HMAC we already had
 
@@ -433,7 +476,7 @@ HTTP server:
 | Script | Covers | Assertions |
 | --- | --- | --- |
 | `apps/api/e2e-admissions.mjs` | Bulk import report, flag detection, tenant isolation, queue ordering, the checklist gate, rejection reasons, the enrolment gate, DB-layer aggregation, audit trail | 49 |
-| `apps/api/e2e-preadmission.mjs` | Applicant registration and token isolation, every instant check, QR authenticity across 8 cases, encryption at rest and who can decrypt, tamper detection, the eligibility gate, drafts staying out of the queue, handover to a student account | 59 |
+| `apps/api/e2e-preadmission.mjs` | Applicant registration and token isolation, every instant check, document-identity refusals, QR authenticity across 8 cases, manual-verification handoff, encryption at rest and who can decrypt, tamper detection, the eligibility gate, drafts staying out of the queue, handover to a student account | 72 |
 | `apps/api/e2e-signedflow.mjs` | University→TNTEU requests (drafts, clarification thread, signed orders, tenant isolation) and the counter-signed merit certificate chain (merit threshold, stage ordering, both signatures, auto-generation, public verification, tamper detection) | 60 |
 
 Both are **destructive** — they reset the demo applicants and their documents,

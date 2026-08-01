@@ -2,6 +2,7 @@ import { Certificate } from "../models/index.js";
 import { verifyCertificateSignature } from "./certificate.js";
 import { namesMatch } from "./admissionRules.js";
 import { scanForQrCodes, extractPdfLinks } from "./qrScan.js";
+import { QR_NEVER_EXPECTED } from "./tnDocuments.js";
 
 // ---------------------------------------------------------------------------
 // What a QR code can and cannot prove.
@@ -141,7 +142,7 @@ async function resolveInternal(certId, applicant) {
  *   payloads: string[], flags: string[], issuerHost?: string, link?: string
  * }>}
  */
-export async function checkDocumentAuthenticity({ buffer, mimeType, applicant }) {
+export async function checkDocumentAuthenticity({ buffer, mimeType, applicant, documentType }) {
   const { payloads, imagesScanned } = await scanForQrCodes(buffer, mimeType);
 
   // Printed/linked verification URLs are a fallback channel when a QR bitmap
@@ -200,17 +201,29 @@ export async function checkDocumentAuthenticity({ buffer, mimeType, applicant })
     };
   }
 
+  // No QR. For TN board marksheets and degree certificates this is not a
+  // finding at all — those documents have never carried one. Saying "that's
+  // normal" and stopping there is the wrong answer: it tells the reviewer to
+  // relax at precisely the point where the QR check gave them nothing. Say
+  // plainly that this check could not contribute, and hand off to the manual
+  // route instead.
+  const neverExpected = QR_NEVER_EXPECTED.has(documentType);
+
   return {
     status: QR_STATUS.ABSENT,
     fatal: false,
-    headline: "No QR code found",
-    detail:
-      "This document carries no scannable verification QR. That is normal for older certificates — it just means the reviewer verifies it the traditional way, against the printed register number and seal.",
+    headline: neverExpected
+      ? "QR verification does not apply to this document"
+      : "No QR code found",
+    detail: neverExpected
+      ? "Tamil Nadu board marksheets and degree certificates are not issued with QR codes, so this check cannot tell you anything either way about this file. Authenticity has to be established from the register number against the issuing authority — the steps are listed alongside."
+      : "No scannable verification QR was found on this document. This check could not contribute; verify it against the issuing authority using the steps alongside.",
     payloads: [],
     imagesScanned,
-    // Also not a flag: most Indian certificates in circulation predate QR
-    // codes entirely. Their absence is the norm, not a warning sign.
+    // Not a flag either way: flags reorder the queue, and a missing QR on a
+    // document that never has one is not a reason to jump the line.
     flags: [],
+    qrApplicable: !neverExpected,
   };
 }
 
