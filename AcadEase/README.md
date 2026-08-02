@@ -178,7 +178,7 @@ resolves to `{}`. Covered by `apps/api/test/tenantScope.test.js`.
 | Crypto | RSA-PSS 3072 signatures, HMAC-SHA256, AES envelope encryption |
 | Files | Multer, pdfkit (generation), pdf-parse (extraction), qrcode, jsQR |
 | Notifications | Server-Sent Events, Nodemailer (optional), Twilio (optional) |
-| Tests | `node --test` — 80 unit tests + 6 end-to-end scripts |
+| Tests | `node --test` — 81 unit tests + 6 end-to-end scripts |
 
 ---
 
@@ -315,9 +315,9 @@ list is empty.
 
 ```bash
 cd AcadEase/apps/api
-npm test              # 80 unit tests, no database needed
+npm test              # 81 unit tests, no database needed
 npm run e2e           # all 6 end-to-end scripts (destructive — dev DB only)
-npm run e2e:reissue   # the grievance → certificate reissue path, 40 assertions
+npm run e2e:reissue   # the grievance → certificate reissue path, 49 assertions
 npm run e2e:certverify # verifying a certificate file, 29 assertions
 
 # Check a DEPLOYED instance before presenting on it

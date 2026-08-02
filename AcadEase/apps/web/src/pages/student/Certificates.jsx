@@ -118,8 +118,21 @@ export default function StudentCertificates() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      showToast("Failed to download certificate.", "error");
+    } catch (err) {
+      // With responseType "blob" an error body arrives as a Blob, not JSON, so
+      // it has to be read back before the message can be shown. A 410 means the
+      // record is fine but the stored PDF is gone — say that, rather than
+      // implying the student's certificate is invalid.
+      let message = "Failed to download certificate.";
+      try {
+        const body = err?.response?.data;
+        const text = body instanceof Blob ? await body.text() : null;
+        const parsed = text ? JSON.parse(text) : body;
+        message = parsed?.detail || parsed?.error || message;
+      } catch {
+        /* keep the generic message */
+      }
+      showToast(message, "error");
     }
   }
 
@@ -165,12 +178,25 @@ export default function StudentCertificates() {
                         Rejected by {r.rejectedStage === "tnteu_review" ? "TNTEU" : "your university"}: {r.rejectionReason}
                       </p>
                     )}
+                    {/* Reissued after a grievance: the student is holding a
+                        certificate they did not request, so say why. */}
+                    {r.supersedes && (
+                      <p className="text-xs text-signal mt-1 leading-relaxed">
+                        Reissued from a corrected record — this replaces an earlier copy, which is now
+                        marked superseded. Download this one.
+                      </p>
+                    )}
+                    {r.certificateStatus === "revoked" && r.revocationType === "superseded" && (
+                      <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                        Superseded by a corrected certificate.
+                      </p>
+                    )}
                     <StageTrail request={r} />
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge status={r.stage === "issued" ? "approved" : r.status} />
-                  {r.status === "approved" && r.pdfPath && (
+                  {r.status === "approved" && r.certId && (
                     <button
                       onClick={() => handleDownload(r.certId)}
                       className="w-8 h-8 rounded-pill bg-[#E8ECFF] text-signal flex items-center justify-center hover:bg-signal hover:text-white transition-colors"

@@ -13,7 +13,7 @@
 // with a fresh HMAC and its own QR, and the two are linked in both directions.
 // Anyone scanning the old QR is told it was superseded and by which
 // certificate. The audit trail stays whole.
-import { Certificate, Result, User, AuditLog } from "../models/index.js";
+import { Certificate, CertificateRequest, Result, User, AuditLog } from "../models/index.js";
 import { generateCertId, signCertificate, generateCertificatePdf, issueSignedDownloadToken } from "./certificate.js";
 import { signApproval, lastSignature, SIGNATURE_ALGORITHM } from "./approvalChain.js";
 import { keyFingerprint, TNTEU_KEY_ID } from "./keyring.js";
@@ -110,6 +110,18 @@ async function reissueOne({ oldCert, student, actor, grievance }) {
   oldCert.revokedReason = `Superseded after grievance ${grievance._id} was resolved: the record this certificate was issued from has been corrected.`;
   oldCert.supersededBy = replacement.certId;
   await oldCert.save();
+
+  // Re-point the originating request at the replacement. The student's
+  // certificate list is built from their requests, so without this the page
+  // keeps showing the old, now-revoked certificate and the reissued one is
+  // invisible to the person it was issued for — which defeats the entire point
+  // of reissuing it.
+  if (oldCert.requestId) {
+    await CertificateRequest.updateOne(
+      { _id: oldCert.requestId },
+      { certificateId: replacement._id }
+    ).catch(() => {});
+  }
 
   return replacement;
 }

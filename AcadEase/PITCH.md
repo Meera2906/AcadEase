@@ -241,7 +241,7 @@ without ever weakening the audit trail. The correction reuses the *same*
 revoke-and-reissue mechanism that protects against forgery, so the fix is as
 provable as the original.
 
-Verified end to end by `apps/api/e2e-grievance-reissue.mjs` — 40 assertions,
+Verified end to end by `apps/api/e2e-grievance-reissue.mjs` — 49 assertions,
 including the negatives (a grievance naming no record, and a resolution that
 explains rather than corrects, must both leave every certificate untouched) and
 idempotence (resolving twice must not revoke the replacement).
@@ -361,7 +361,7 @@ certificate is already in their list.
 and it tells you what replaced it. Nobody had to remember to do any of this."*
 
 **Fallback if the network is down:** `cd apps/api && npm run e2e:reissue` runs
-the whole grievance→reissue path headless and prints all 40 assertions.
+the whole grievance→reissue path headless and prints all 49 assertions.
 
 The four-laptop version of this script, with the preflight checks and recovery
 steps, is in [DEMO-GUIDE.md](./DEMO-GUIDE.md).

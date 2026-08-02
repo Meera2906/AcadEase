@@ -1,4 +1,6 @@
+import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import multer from "multer";
 import { CertificateRequest, Certificate, User, AttendanceRecord, Result, AuditLog } from "../models/index.js";
 import { sha256 } from "../utils/admissionRules.js";
@@ -7,6 +9,8 @@ import { generateCertId, signCertificate, verifyCertificateSignature, generateCe
 import { signApproval, verifyChain, lastSignature, keyIdForActor, SIGNATURE_ALGORITHM } from "../utils/approvalChain.js";
 import { keyFingerprint, TNTEU_KEY_ID } from "../utils/keyring.js";
 import { pushNotification } from "../utils/notify.js";
+
+const API_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // A merit certificate asserts academic distinction, so it carries a threshold
 // the server checks against published results — a student cannot request one
@@ -210,13 +214,19 @@ export async function listStudentCertificateRequests(req, res) {
 
   const requests = await CertificateRequest.find({ studentId })
     .sort({ createdAt: -1 })
-    .populate("certificateId", "certId pdfPath status");
+    .populate("certificateId", "certId pdfPath status revocationType supersedes supersededBy issuedAt");
 
   const mapped = requests.map((r) => {
     const obj = r.toObject();
     obj.certId = obj.certificateId?.certId || null;
     obj.pdfPath = obj.certificateId?.pdfPath || null;
     obj.certificateStatus = obj.certificateId?.status || null;
+    obj.issuedAt = obj.certificateId?.issuedAt || null;
+    // Set when this certificate replaced an earlier one after a grievance was
+    // resolved — the student should be told why their certificate changed.
+    obj.supersedes = obj.certificateId?.supersedes || null;
+    obj.supersededBy = obj.certificateId?.supersededBy || null;
+    obj.revocationType = obj.certificateId?.revocationType || null;
     return obj;
   });
   res.json({ requests: mapped });
@@ -502,10 +512,25 @@ export async function downloadCertificate(req, res) {
   cert.downloadCount += 1;
   await cert.save();
 
-  const physicalPath = cert.pdfPath.replace(/^\/+/, "");
-  const fileName = `${cert.certId}.pdf`;
+  // Resolve against the API root rather than the process working directory,
+  // which is not guaranteed to be the same thing depending on how the server
+  // was started.
+  const physicalPath = path.resolve(API_ROOT, cert.pdfPath.replace(/^\/+/, ""));
 
-  res.download(physicalPath, fileName);
+  if (!fs.existsSync(physicalPath)) {
+    // Very likely on a host with an ephemeral filesystem: the database row
+    // survived a redeploy but the generated PDF did not. Say so plainly instead
+    // of throwing — QR verification still works and is the stronger artefact.
+    return res.status(410).json({
+      error: "The PDF for this certificate is no longer on the server",
+      detail:
+        "The certificate record is intact and still verifies at its public link — only the stored file is missing. Ask the issuing office to regenerate it.",
+      certId: cert.certId,
+      verifyPath: `/verify/${cert.certId}`,
+    });
+  }
+
+  res.download(physicalPath, `${cert.certId}.pdf`);
 }
 
 // GET /api/certificates/verify/:certId  (public, no auth)

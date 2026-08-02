@@ -14,6 +14,7 @@
 //
 //   node e2e-grievance-reissue.mjs
 import "dotenv/config";
+import crypto from "crypto";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import connectDB from "./src/config/db.js";
@@ -261,6 +262,33 @@ async function main() {
 
   const audit = await AuditLog.findOne({ action: "certificates_reissued_after_grievance" }).lean();
   check("an audit entry was written", Boolean(audit), "no audit row");
+
+  // ── What the student actually sees ─────────────────────────────────────
+  // The reported failure: the reissue worked server-side, but the student's
+  // certificate list is built from their *requests*, and the request still
+  // pointed at the old revoked certificate — so the replacement was invisible
+  // and the download button served the superseded file.
+  const studentList = await call("GET", `/api/certificates/requests/student/${STUDENT}`, { token: student });
+  check("the student can list their certificates", studentList.status === 200);
+
+  const issuedRow = (studentList.body.requests || []).find((r) => r.certId);
+  check("the student's list points at the REPLACEMENT, not the revoked original",
+    issuedRow?.certId === newCertId, `points at ${issuedRow?.certId}, expected ${newCertId}`);
+  check("it is shown as active", issuedRow?.certificateStatus === "active", issuedRow?.certificateStatus);
+  check("it is marked as replacing an earlier certificate",
+    issuedRow?.supersedes === originalCertId, `supersedes=${issuedRow?.supersedes}`);
+
+  const download = await fetch(`${base}/api/certificates/download/${newCertId}`, {
+    headers: { authorization: `Bearer ${student}`, cookie: `csrfToken=${CSRF}`, "x-csrf-token": CSRF },
+  });
+  check("the student can download the reissued certificate", download.status === 200, `HTTP ${download.status}`);
+  check("and it is a real PDF", (download.headers.get("content-type") || "").includes("pdf"),
+    download.headers.get("content-type"));
+  const downloaded = Buffer.from(await download.arrayBuffer());
+  check("the downloaded file is not empty", downloaded.length > 1000, `${downloaded.length} bytes`);
+  check("the downloaded file is the reissued PDF, not the superseded one",
+    crypto.createHash("sha256").update(downloaded).digest("hex") === newRow.pdfHash,
+    "hash does not match the reissued certificate");
 
   // ── Idempotence ────────────────────────────────────────────────────────
   const secondResolve = await call("PATCH", `/api/grievances/${disputedId}/resolve`, {
