@@ -175,7 +175,12 @@ export async function generateCertificatePdf(cert, { verifyBaseUrl }) {
     stream.on("error", reject);
   });
 
-  return { pdfPath: toPublicStoragePath(filePath), verifyUrl };
+  // Hash the finished file. Verification proves the *record* is genuine; this
+  // is what additionally proves the PDF in someone's hand is the exact file we
+  // produced, rather than a re-typed lookalike carrying a real QR code.
+  const pdfHash = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+
+  return { pdfPath: toPublicStoragePath(filePath), verifyUrl, pdfHash };
 }
 
 function certificateTitle(type) {

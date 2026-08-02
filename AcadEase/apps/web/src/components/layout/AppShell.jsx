@@ -5,7 +5,7 @@ import {
   FileBadge, MessageSquareWarning, Bell, LogOut,
   GraduationCap, Menu, X, User, Users, Building2,
   BookOpen, Megaphone, BarChart2, ChevronDown,
-  ShieldCheck, UploadCloud, UserCheck, Landmark, Database,
+  ShieldCheck, UploadCloud, UserCheck, Landmark, Database, FileSearch,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api, { getAccessToken } from "../../api/client.js";
@@ -29,6 +29,7 @@ const NAV_BY_ROLE = {
     { to: "/faculty/results",      label: "Results",         icon: ClipboardList },
     { to: "/admin/study-materials", label: "Study Materials", icon: BookOpen },
     { to: "/faculty/od-requests",  label: "OD Requests",     icon: MessageSquareWarning },
+    { to: "/faculty/verify-certificate", label: "Verify Certificate", icon: FileSearch },
     { to: "/admin/circulars",      label: "Circulars",       icon: Megaphone },
   ],
   // University admin — their job is submitting applicant batches and tracking

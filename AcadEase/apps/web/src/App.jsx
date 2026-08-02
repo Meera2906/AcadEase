@@ -13,6 +13,7 @@ import FacultyAttendanceMarking from "./pages/faculty/AttendanceMarking.jsx";
 import FacultyResultEntry from "./pages/faculty/ResultEntry.jsx";
 import FacultyOdRequests from "./pages/faculty/OdRequests.jsx";
 import FacultyProfile from "./pages/faculty/Profile.jsx";
+import FacultyCertificateVerify from "./pages/faculty/CertificateVerify.jsx";
 import AdminDashboard from "./pages/admin/Dashboard.jsx";
 import AdminUsers from "./pages/admin/Users.jsx";
 import AdminDepartments from "./pages/admin/Departments.jsx";
@@ -90,6 +91,16 @@ export default function App() {
       <Route path="/faculty/results" element={<ProtectedRoute roles={["faculty"]}><FacultyResultEntry /></ProtectedRoute>} />
       <Route path="/faculty/od-requests" element={<ProtectedRoute roles={["faculty"]}><FacultyOdRequests /></ProtectedRoute>} />
       <Route path="/faculty/profile" element={<ProtectedRoute roles={["faculty"]}><FacultyProfile /></ProtectedRoute>} />
+      {/* Hand it a certificate file and ask whether it is real. Staff-facing
+          counterpart to the public /verify/:certId QR page. */}
+      <Route
+        path="/faculty/verify-certificate"
+        element={
+          <ProtectedRoute roles={["faculty", "college_admin", "college_coordinator", "tnteu_admin"]}>
+            <FacultyCertificateVerify />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Admission verification — the TNTEU bulk-processing workflow */}
       <Route path="/admin/admissions/upload" element={<ProtectedRoute roles={["college_admin", "college_coordinator", "tnteu_admin"]}><AdmissionsUpload /></ProtectedRoute>} />

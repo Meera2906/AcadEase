@@ -1,4 +1,8 @@
+import path from "path";
+import multer from "multer";
 import { CertificateRequest, Certificate, User, AttendanceRecord, Result, AuditLog } from "../models/index.js";
+import { sha256 } from "../utils/admissionRules.js";
+import { scanForQrCodes, extractPdfLinks } from "../utils/qrScan.js";
 import { generateCertId, signCertificate, verifyCertificateSignature, generateCertificatePdf, issueSignedDownloadToken } from "../utils/certificate.js";
 import { signApproval, verifyChain, lastSignature, keyIdForActor, SIGNATURE_ALGORITHM } from "../utils/approvalChain.js";
 import { keyFingerprint, TNTEU_KEY_ID } from "../utils/keyring.js";
@@ -368,7 +372,7 @@ export async function approveCertificateRequest(req, res) {
   const approvalChain = [...request.approvals.map((a) => (a.toObject ? a.toObject() : a)), issuerApproval];
 
   const verifyBaseUrl = process.env.CLIENT_URL || "http://localhost:5173";
-  const { pdfPath } = await generateCertificatePdf(
+  const { pdfPath, pdfHash } = await generateCertificatePdf(
     { ...certDraft, approvalChain },
     { verifyBaseUrl }
   );
@@ -382,6 +386,7 @@ export async function approveCertificateRequest(req, res) {
     issuerKeyFingerprint: keyFingerprint(TNTEU_KEY_ID),
     signatureAlgorithm: SIGNATURE_ALGORITHM,
     pdfPath,
+    pdfHash,
     downloadUrlToken: token,
     downloadUrlExpiresAt: expiresAt,
   });
@@ -504,21 +509,12 @@ export async function downloadCertificate(req, res) {
 }
 
 // GET /api/certificates/verify/:certId  (public, no auth)
-export async function verifyCertificate(req, res) {
-  const { certId } = req.params;
-  const cert = await Certificate.findOne({ certId });
-
-  if (!cert) {
-    return res.status(404).json({ verified: false, message: "This certificate could not be verified. Contact the institution." });
-  }
-
+// The single verification routine. Both the public QR endpoint and the staff
+// upload check call this, so the two can never drift apart and start giving
+// different answers about the same certificate.
+export async function buildVerificationReport(cert) {
   const signatureValid = verifyCertificateSignature(cert);
 
-  // Re-check every counter-signature from the stored public keys. Anyone
-  // scanning the QR gets the same answer we would: which institutions signed,
-  // in what order, and whether each signature still matches what it signed.
-  // The approval links bind to the request; the final issuance link binds to
-  // the certificate itself, so both subjects are permitted in this chain.
   // A reissued certificate inherits the links signed for the certificate it
   // replaced — the university's original approval is exactly what we do not
   // want to throw away. Those links legitimately name an ancestor certId, so
@@ -546,19 +542,20 @@ export async function verifyCertificate(req, res) {
 
   const isActive = cert.status === "active" && signatureValid && chainValid;
 
-  // Only the minimal, non-sensitive fields per PRD 5.4.4 — no marks, no attendance, no contact info.
   // A superseded certificate is not a forgery and must not read like one: the
   // record behind it was corrected and a replacement was issued. Whoever
   // scanned this QR is pointed at the current certificate instead.
   const superseded = cert.status === "revoked" && cert.revocationType === "superseded";
 
-  res.json({
+  // Only the minimal, non-sensitive fields per PRD 5.4.4 — no marks, no attendance, no contact info.
+  return {
     verified: isActive,
     status: cert.status,
     revocationType: cert.revocationType || null,
     superseded,
     supersededBy: cert.supersededBy || null,
     supersedes: cert.supersedes || null,
+    certId: cert.certId,
     studentName: cert.studentName,
     certificateType: cert.type,
     issueDate: cert.issuedAt,
@@ -574,6 +571,7 @@ export async function verifyCertificate(req, res) {
         link.stage === "college_review" ? "Approved by the university"
         : link.stage === "tnteu_review" ? "Counter-signed by TNTEU"
         : link.stage === "issued" ? "Issued and sealed by TNTEU"
+        : link.stage === "reissued" ? "Reissued and sealed by TNTEU after a correction"
         : link.stage,
       authority: link.authority,
       decision: link.decision,
@@ -594,7 +592,19 @@ export async function verifyCertificate(req, res) {
         : !chainValid
           ? "The approval chain on this certificate does not verify — it has been altered since it was issued."
           : "This certificate could not be verified. The signature is invalid or the record is incomplete.",
-  });
+  };
+}
+
+// GET /api/certificates/verify/:certId  — public, no login
+export async function verifyCertificate(req, res) {
+  const { certId } = req.params;
+  const cert = await Certificate.findOne({ certId });
+
+  if (!cert) {
+    return res.status(404).json({ verified: false, message: "This certificate could not be verified. Contact the institution." });
+  }
+
+  res.json(await buildVerificationReport(cert));
 }
 
 // PATCH /api/certificates/:certId/revoke
@@ -613,4 +623,159 @@ export async function revokeCertificate(req, res) {
   await cert.save();
 
   res.json({ message: "Certificate revoked", cert });
+}
+
+// ---------------------------------------------------------------------------
+// Verify a certificate someone hands you, as a file
+// ---------------------------------------------------------------------------
+//
+// The QR page answers "is certificate X genuine". This answers the question a
+// member of staff actually has: "somebody gave me this PDF — is it real?"
+//
+// Two independent checks, and the difference between them matters:
+//
+//   1. THE RECORD. Read the certId out of the QR and verify the issued record:
+//      HMAC, the counter-signature chain, revocation, supersession. This is the
+//      same routine the public page runs.
+//
+//   2. THE FILE. Hash the uploaded bytes and compare against the hash recorded
+//      when we generated the PDF. A forger can print a convincing certificate
+//      around a genuine QR code — the record then verifies perfectly while the
+//      paper in your hand says something else entirely. Only the file hash
+//      catches that, and when it fails the answer is not "fake" but "the record
+//      is genuine, this file is not the one we issued — read the details below
+//      and compare them against the paper".
+
+export const certificateFileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const mime = (file.mimetype || "").toLowerCase();
+    if ([".pdf", ".jpg", ".jpeg", ".png"].includes(ext) && ["application/pdf", "image/jpeg", "image/png"].includes(mime)) {
+      return cb(null, true);
+    }
+    cb(new Error("Upload the certificate as a PDF, JPG or PNG"));
+  },
+});
+
+const CERT_ID_IN_URL = /\/verify\/([0-9a-fA-F-]{36})/;
+const BARE_CERT_ID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// POST /api/certificates/verify-upload   (staff only)
+// Accepts either a file, or a pasted certId for when the QR will not scan.
+export async function verifyCertificateUpload(req, res) {
+  const typed = String(req.body?.certId || "").trim();
+  const file = req.file;
+
+  if (!file && !typed) {
+    return res.status(400).json({ error: "Upload the certificate file, or paste its certificate ID" });
+  }
+
+  let certId = null;
+  let source = null;
+  let qrPayloads = [];
+  let uploadedHash = null;
+
+  if (typed) {
+    certId = CERT_ID_IN_URL.exec(typed)?.[1] || (BARE_CERT_ID.test(typed) ? typed : null);
+    if (!certId) {
+      return res.status(400).json({ error: "That does not look like a certificate ID or a verification link" });
+    }
+    source = "typed";
+  }
+
+  if (file) {
+    uploadedHash = sha256(file.buffer);
+
+    if (!certId) {
+      // The QR bitmap first, then the PDF's link annotations — a scan of a
+      // printout often loses the QR to compression while the text survives.
+      const { payloads } = await scanForQrCodes(file.buffer, (file.mimetype || "").toLowerCase());
+      qrPayloads = payloads;
+      for (const payload of payloads) {
+        const found = CERT_ID_IN_URL.exec(payload)?.[1];
+        if (found) { certId = found; source = "qr"; break; }
+      }
+
+      if (!certId && (file.mimetype || "").toLowerCase() === "application/pdf") {
+        for (const link of extractPdfLinks(file.buffer)) {
+          const found = CERT_ID_IN_URL.exec(link)?.[1];
+          if (found) { certId = found; source = "pdf_link"; break; }
+        }
+      }
+    }
+  }
+
+  if (!certId) {
+    return res.status(422).json({
+      readable: false,
+      fileHash: uploadedHash,
+      qrPayloads,
+      error: "No AcadEase certificate reference could be read from this file",
+      detail:
+        qrPayloads.length > 0
+          ? "A QR code was found, but it does not point at this institution's verification service. It may be a certificate from another issuer."
+          : "No QR code could be decoded. If you have the certificate ID printed on the document, paste it instead.",
+    });
+  }
+
+  const cert = await Certificate.findOne({ certId });
+  if (!cert) {
+    return res.status(404).json({
+      verified: false,
+      readable: true,
+      certId,
+      referenceSource: source,
+      fileHash: uploadedHash,
+      fileMatch: "no_record",
+      message:
+        "This document references a certificate ID that was never issued. A genuine certificate always resolves — treat this as a forgery.",
+    });
+  }
+
+  const report = await buildVerificationReport(cert);
+
+  // The file comparison, kept deliberately separate from the record verdict.
+  let fileMatch = "not_checked";
+  if (uploadedHash) {
+    if (!cert.pdfHash) fileMatch = "unavailable";
+    else fileMatch = uploadedHash === cert.pdfHash ? "exact" : "different";
+  }
+
+  const fileMessage = {
+    exact: "This file is byte-for-byte the PDF this institution generated.",
+    different:
+      "The certificate record is genuine, but this file is NOT the PDF we issued — it has been re-saved, re-printed or altered. Compare the details below against the document in front of you before accepting it.",
+    unavailable:
+      "This certificate predates file hashing, so the file itself cannot be compared. The record and its signatures were still checked.",
+    no_record: "No matching certificate record exists.",
+    not_checked: "No file was uploaded, so only the record was checked.",
+  }[fileMatch];
+
+  await AuditLog.create({
+    actorId: req.user.userId,
+    actorRole: req.user.role,
+    action: "certificate_verified_by_upload",
+    collegeId: cert.collegeId,
+    targetType: "Certificate",
+    targetId: cert.certId,
+    metadata: { referenceSource: source, fileMatch, verified: report.verified },
+  }).catch(() => {});
+
+  res.json({
+    ...report,
+    readable: true,
+    referenceSource: source,
+    fileHash: uploadedHash,
+    expectedHash: cert.pdfHash || null,
+    fileMatch,
+    fileMessage,
+    // The single line to read out loud.
+    verdict: !report.verified
+      ? report.message
+      : fileMatch === "different"
+        ? "Genuine certificate, but this is not the original file — check the details by eye."
+        : "Genuine, and this is the original file.",
+  });
 }

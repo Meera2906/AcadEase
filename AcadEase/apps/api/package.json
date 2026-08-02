@@ -18,7 +18,9 @@
     "e2e:signedflow": "node e2e-signedflow.mjs",
     "e2e:twostage": "node e2e-twostage.mjs",
     "e2e:reissue": "node e2e-grievance-reissue.mjs",
-    "e2e": "node e2e-admissions.mjs && node e2e-preadmission.mjs && node e2e-signedflow.mjs && node e2e-twostage.mjs && node e2e-grievance-reissue.mjs"
+    "e2e:certverify": "node e2e-certverify.mjs",
+    "demo:preflight": "node scripts/demo-preflight.mjs",
+    "e2e": "node e2e-admissions.mjs && node e2e-preadmission.mjs && node e2e-signedflow.mjs && node e2e-twostage.mjs && node e2e-grievance-reissue.mjs && node e2e-certverify.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -11,6 +11,8 @@ import {
   verifyCertificate,
   revokeCertificate,
   getCertificateEligibility,
+  verifyCertificateUpload,
+  certificateFileUpload,
 } from "../controllers/certificateController.js";
 
 const router = Router();
@@ -26,6 +28,18 @@ router.get("/requests/student/:studentId", asyncHandler(listStudentCertificateRe
 router.patch("/request/:id/approve", requireRole("college_admin", "college_coordinator", "tnteu_admin"), asyncHandler(approveCertificateRequest));
 router.patch("/request/:id/reject", requireRole("college_admin", "college_coordinator", "tnteu_admin"), asyncHandler(rejectCertificateRequest));
 router.get("/download/:certId", asyncHandler(downloadCertificate));
+
+// Hand a certificate file to the system and ask whether it is real. Staff only:
+// it accepts uploads, and the public QR page already covers everyone else.
+router.post(
+  "/verify-upload",
+  requireRole("faculty", "college_admin", "college_coordinator", "tnteu_admin"),
+  (req, res, next) =>
+    certificateFileUpload.single("file")(req, res, (err) =>
+      err ? res.status(400).json({ error: err.message }) : next()
+    ),
+  asyncHandler(verifyCertificateUpload)
+);
 router.patch("/:certId/revoke", requireRole("college_admin", "tnteu_admin"), asyncHandler(revokeCertificate));
 
 export default router;

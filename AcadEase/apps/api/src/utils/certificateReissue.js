@@ -82,7 +82,7 @@ async function reissueOne({ oldCert, student, actor, grievance }) {
 
   const approvalChain = [...(oldCert.approvalChain || []), reissueApproval];
   const verifyBaseUrl = process.env.CLIENT_URL || "http://localhost:5173";
-  const { pdfPath } = await generateCertificatePdf({ ...draft, approvalChain }, { verifyBaseUrl });
+  const { pdfPath, pdfHash } = await generateCertificatePdf({ ...draft, approvalChain }, { verifyBaseUrl });
   const { token, expiresAt } = issueSignedDownloadToken();
 
   const replacement = await Certificate.create({
@@ -93,6 +93,7 @@ async function reissueOne({ oldCert, student, actor, grievance }) {
     issuerKeyFingerprint: keyFingerprint(TNTEU_KEY_ID),
     signatureAlgorithm: SIGNATURE_ALGORITHM,
     pdfPath,
+    pdfHash,
     downloadUrlToken: token,
     downloadUrlExpiresAt: expiresAt,
     status: "active",

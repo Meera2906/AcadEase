@@ -55,6 +55,10 @@ const certificateSchema = new mongoose.Schema(
 
     // Download
     pdfPath: { type: String, required: true }, // server-side storage path
+    // SHA-256 of the generated PDF. Lets a verifier confirm the file in front of
+    // them is byte-for-byte the one we issued, not just that the record behind
+    // it is genuine. Null on certificates issued before file hashing existed.
+    pdfHash: { type: String, default: null, index: true },
     downloadUrlToken: { type: String, default: null }, // signed, short-lived
     downloadUrlExpiresAt: { type: Date, default: null },
     downloadCount: { type: Number, default: 0 },

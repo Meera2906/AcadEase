@@ -166,6 +166,17 @@ the HMAC alone.
 An admin can revoke a certificate at any time
 (`PATCH /api/certificates/:certId/revoke`).
 
+**And the reverse direction:** staff have a *Verify Certificate* screen where a
+certificate handed to them — a PDF, a photo, a scan — is dropped in and checked.
+The QR is decoded, the record is verified against its signatures, and the
+uploaded bytes are hashed against the PDF we generated. Those are two separate
+verdicts on purpose: a forger can print a convincing certificate around a
+genuine QR code, and only the file hash catches it. The screen then says
+"genuine record, but this is not the file we issued — compare these details
+against the paper in your hand".
+`verifyCertificateUpload` in `certificateController.js` ·
+UI: `apps/web/src/pages/faculty/CertificateVerify.jsx`
+
 **Grievances.** A student raises one; faculty and the college office
 acknowledge, then resolve or reject it, with the reason recorded; the student
 rates the outcome. `grievanceController.js` ·
@@ -351,6 +362,9 @@ and it tells you what replaced it. Nobody had to remember to do any of this."*
 
 **Fallback if the network is down:** `cd apps/api && npm run e2e:reissue` runs
 the whole grievance→reissue path headless and prints all 40 assertions.
+
+The four-laptop version of this script, with the preflight checks and recovery
+steps, is in [DEMO-GUIDE.md](./DEMO-GUIDE.md).
 
 ---
 

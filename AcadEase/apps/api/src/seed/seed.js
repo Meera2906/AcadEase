@@ -404,9 +404,14 @@ async function seedSemesterResults(students, collegeId) {
 
   const results = cseStudents.map((student, si) => {
     const subjects = courses.map((c, ci) => {
-      // Struggling students get lower grades
-      const isStruggling = si % 5 === 0;
-      const isAverage = si % 3 === 0;
+      // Student 0 is the walkthrough student: top grades and no arrears, so the
+      // merit-certificate path is actually available on a freshly seeded
+      // database. Every other student keeps a realistic spread — the struggling
+      // and average cohorts are what make the analytics and chronic-absentee
+      // views worth looking at.
+      const isExemplar = si === 0;
+      const isStruggling = !isExemplar && si % 5 === 0;
+      const isAverage = !isExemplar && si % 3 === 0;
       const gradePool = isStruggling
         ? ["C", "B", "U", "B+", "C"]
         : isAverage
@@ -432,6 +437,11 @@ async function seedSemesterResults(students, collegeId) {
       subjects,
       enteredBy: "ADM_CSE_001",
       releasedAt: new Date("2024-05-15"),
+      // These are historical results with a release date — they are published,
+      // not drafts. Leaving them at the schema default meant no student had any
+      // published result, so the Results page was empty and a merit certificate
+      // could never be requested by anyone.
+      status: "published",
     };
   });
 
