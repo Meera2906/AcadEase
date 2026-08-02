@@ -249,7 +249,7 @@ You want `READY.` Anything else — read the line, each names its own fix.
 
 | | Setup |
 |---|---|
-| **All four** | Signed in at the **Vercel URL**. Browser zoom **125%** — judges are three metres away. Every other tab closed. OS notifications off. Laptop plugged in. |
+| **All four** | Signed in at the **Vercel URL**, then **reload once** to confirm the session survives it. Browser zoom **125%** — judges are three metres away. Every other tab closed. OS notifications off. Laptop plugged in. |
 | 🟣 **L1** | Tab 1: **Analysis** (`/admin/analytics`). Tab 2: **Verification** (`/admin/verification`). Tab 3: **College Requests** (`/admin/university-requests`). Tab 4: **Circulars** (`/admin/circulars`). Tab 5: **Certificates** (`/admin/certificates`). |
 | 🔵 **L2** | Tab 1: **Bulk Submission** (`/admin/admissions/upload`). Tab 2: **Verify Documents** (`/admin/verification`). Tab 3: **Grievances** (`/admin/grievances`). Plus a file-manager window open on `apps/api/demo-data/`, and a terminal in `apps/api`. |
 | 🟢 **L3** | Tab 1: **Mark Attendance** (`/faculty/attendance`) with **CS301 Database Management Systems** already selected. Tab 2: **Verify Certificate** (`/faculty/verify-certificate`). |
@@ -813,6 +813,8 @@ Stay on the clock. Everything here has a way forward.
 | **A staff laptop shows a QR code** | 2FA never enrolled | That person scans it silently while another beat runs. Do not narrate it. |
 | **"CSRF token missing or invalid"** | Deployed build predates the fix | Redeploy **both** Render and Vercel. Nothing else fixes it. |
 | **Someone gets logged out** | Cross-site cookie dropped | Sign back in. If it repeats, `COOKIE_CROSS_SITE=true` is missing on Render. |
+| **A new tab or refresh shows the login page** | Deployed build predates the session-restore fix | Redeploy Vercel *and* Render. As a stopgap, navigate with in-app links only — never reload, never open a second tab. |
+| **"This page isn't for your role"** | You are signed in, just on the wrong account for that screen | Not a logout. Check which account that laptop is on — Analysis and Student Data are TNTEU-only. |
 | **"Too many failed attempts"** | Rate limit on shared Wi-Fi | Wait 60s. Only *failed* logins count, so somebody is mistyping a password. |
 | **Certificate download 404s** | PDF was on ephemeral storage, wiped by a redeploy | **Verify by QR instead** — it still works, and it is the stronger artefact anyway. |
 | **The reissue doesn't fire** | Grievance named no result, or box unticked | Raise it again correctly. 40 seconds. |

@@ -133,6 +133,18 @@ export async function setupTotp(req, res) {
   });
 }
 
+function publicUser(user) {
+  return {
+    userId: user.userId,
+    role: user.role === "admin" ? "college_admin" : user.role === "superadmin" ? "tnteu_admin" : user.role,
+    name: user.name,
+    email: user.email,
+    departmentId: user.departmentId,
+    collegeId: user.collegeId || user.institutionId || null,
+    institutionId: user.institutionId || user.collegeId || null,
+  };
+}
+
 async function issueTokens(res, user) {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
@@ -154,15 +166,7 @@ async function issueTokens(res, user) {
     // failed the CSRF check. Locally this was invisible: :5173 and :5000 share
     // the host "localhost", and cookies ignore the port.
     csrfToken,
-    user: {
-      userId: user.userId,
-      role: user.role === "admin" ? "college_admin" : user.role === "superadmin" ? "tnteu_admin" : user.role,
-      name: user.name,
-      email: user.email,
-      departmentId: user.departmentId,
-      collegeId: user.collegeId || user.institutionId || null,
-      institutionId: user.institutionId || user.collegeId || null,
-    },
+    user: publicUser(user),
   });
 }
 
@@ -187,7 +191,7 @@ export async function refresh(req, res) {
   const accessToken = signAccessToken(user);
   const csrfToken = crypto.randomBytes(32).toString("hex");
   res.cookie("csrfToken", csrfToken, { httpOnly: false, ...cookieOptions() });
-  return res.json({ accessToken, csrfToken });
+  return res.json({ accessToken, csrfToken, user: publicUser(user) });
 }
 
 // POST /api/auth/logout

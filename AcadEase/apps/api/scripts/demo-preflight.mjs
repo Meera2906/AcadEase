@@ -132,6 +132,22 @@ const authed = {
   origin: WEB,
 };
 
+// ── 3b. Does a reload keep you signed in? ───────────────────────────────────
+// The access token is held in memory, so a refresh or a new tab starts with
+// nothing but the cookie. If /auth/refresh does not hand back the user, the app
+// cannot rebuild the session and every reload lands on the login page — which
+// matters enormously when each laptop opens several tabs.
+const reload = await fetch(`${API}/api/auth/refresh`, {
+  method: "POST",
+  headers: { cookie: cookies.map((c) => c.split(";")[0]).join("; "), origin: WEB },
+});
+const reloaded = await json(reload);
+
+check("a reload can restore the session (refresh accepts the cookie)", reload.status === 200,
+  `HTTP ${reload.status} — new tabs and hard refreshes will bounce to the login page`);
+check("refresh returns the signed-in user, not just a token", Boolean(reloaded.user?.userId),
+  "deployed build predates the session-restore fix — every reload looks like a logout");
+
 // ── 4. Can the student do what the script asks them to do? ──────────────────
 section("4. The student's part of the demo");
 
